@@ -120,10 +120,6 @@ canvas#game-canvas {
     <div id="crt-overlay"></div>
     
     <div class="top-controls">
-      <button id="pause-btn" class="arcade-btn">PAUSE [P]</button>
-      <button id="sfx-toggle-btn" class="arcade-btn">SOUNDS: ON</button>
-      <button id="music-toggle-btn" class="arcade-btn">MUSIC: ON</button>
-      <button id="crt-toggle-btn" class="arcade-btn">CRT: ON</button>
       <button id="fullscreen-btn" class="arcade-btn">FULLSCREEN</button>
     </div>
   </div>
@@ -581,6 +577,91 @@ MetroMonsters.Input = (() => {
   let pointerClicked = false;
   let clickPos = null;
 
+  // Active Device Tracker & Settings
+  let activeDeviceP1 = "KEYBOARD"; // KEYBOARD, GAMEPAD, TOUCH
+  let activeDeviceP2 = "GAMEPAD";  // GAMEPAD, KEYBOARD
+  let touchEnabled = 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
+  let touchModeSetting = "AUTO";   // AUTO, ALWAYS_ON, OFF
+
+  // Touch Virtual Controls State
+  let touchStick = { active: false, startX: 0, startY: 0, currX: 0, currY: 0, dir: { left: false, right: false, up: false, down: false } };
+  let touchButtons = { jump: false, punch: false, jumpPressed: false, punchPressed: false };
+
+  // Gamepad Menu Navigation Debounce
+  let gpMenuDebounce = 0;
+
+  // Touch Event Listeners for Mobile
+  window.addEventListener("touchstart", (e) => {
+    if (touchModeSetting === "OFF") return;
+    activeDeviceP1 = "TOUCH";
+    const canvas = document.getElementById("game-canvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = 1280 / rect.width;
+    const scaleY = 720 / rect.height;
+
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      const tx = (t.clientX - rect.left) * scaleX;
+      const ty = (t.clientY - rect.top) * scaleY;
+
+      // Check Virtual Joystick (Bottom Left: x: 60-220, y: 500-660)
+      if (tx >= 40 && tx <= 240 && ty >= 480 && ty <= 680) {
+        touchStick.active = true;
+        touchStick.startX = tx;
+        touchStick.startY = ty;
+        touchStick.currX = tx;
+        touchStick.currY = ty;
+      }
+      // Check Touch Jump Button (Bottom Right: x: 1040-1160, y: 520-640)
+      if (Math.hypot(tx - 1100, ty - 580) <= 50) {
+        if (!touchButtons.jump) touchButtons.jumpPressed = true;
+        touchButtons.jump = true;
+      }
+      // Check Touch Punch Button (Bottom Right: x: 1150-1270, y: 480-600)
+      if (Math.hypot(tx - 1200, ty - 540) <= 50) {
+        if (!touchButtons.punch) touchButtons.punchPressed = true;
+        touchButtons.punch = true;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener("touchmove", (e) => {
+    if (!touchStick.active) return;
+    const canvas = document.getElementById("game-canvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = 1280 / rect.width;
+    const scaleY = 720 / rect.height;
+
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      const tx = (t.clientX - rect.left) * scaleX;
+      const ty = (t.clientY - rect.top) * scaleY;
+
+      if (tx <= 400) { // Left half of screen drives stick
+        touchStick.currX = tx;
+        touchStick.currY = ty;
+        const dx = tx - touchStick.startX;
+        const dy = ty - touchStick.startY;
+
+        touchStick.dir.left = dx < -20;
+        touchStick.dir.right = dx > 20;
+        touchStick.dir.up = dy < -20;
+        touchStick.dir.down = dy > 20;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener("touchend", (e) => {
+    if (e.touches.length === 0) {
+      touchStick.active = false;
+      touchStick.dir = { left: false, right: false, up: false, down: false };
+      touchButtons.jump = false;
+      touchButtons.punch = false;
+    }
+  });
+
   window.addEventListener("keydown", (e) => {
     if (!keys[e.code]) {
       justPressedKeys[e.code] = true;
@@ -628,6 +709,16 @@ MetroMonsters.Input = (() => {
     }
   });
 
+  function checkKeys(keyArray) {
+    let isDown = false;
+    let wasPressed = false;
+    keyArray.forEach(k => {
+      if (keys[k]) isDown = true;
+      if (justPressedKeys[k]) wasPressed = true;
+    });
+    return { isDown, wasPressed };
+  }
+
   return Object.freeze({
     clearPressed: () => {
       for (let k in justPressedKeys) {
@@ -635,21 +726,99 @@ MetroMonsters.Input = (() => {
       }
       pointerClicked = false;
       clickPos = null;
+      touchButtons.jumpPressed = false;
+      touchButtons.punchPressed = false;
     },
     getClickPos: () => clickPos,
-    isConfirmPressed: (playerNum = 1) => {
-      if (pointerClicked) return true;
-      if (justPressedKeys["Enter"] || justPressedKeys["Space"] || justPressedKeys["KeyF"] || justPressedKeys["KeyN"] || justPressedKeys["KeyM"] || justPressedKeys["KeyG"]) return true;
-      
-      const mapping = playerNum === 1 ? MetroMonsters.Constants.CONTROLS.P1_KEYBOARD : MetroMonsters.Constants.CONTROLS.P2_KEYBOARD;
-      if (justPressedKeys[mapping.PUNCH] || justPressedKeys[mapping.JUMP]) return true;
+    getActiveDeviceP1: () => activeDeviceP1,
+    getActiveDeviceP2: () => activeDeviceP2,
+    getTouchStick: () => touchStick,
+    getTouchButtons: () => touchButtons,
+    isTouchActive: () => {
+      if (touchModeSetting === "ALWAYS_ON") return true;
+      if (touchModeSetting === "OFF") return false;
+      return touchEnabled || activeDeviceP1 === "TOUCH";
+    },
 
-      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const gp = gamepads[playerNum - 1];
-      if (gp && gp.connected) {
-        if (gp.buttons[0]?.pressed || gp.buttons[1]?.pressed || gp.buttons[9]?.pressed) return true;
+    getPromptText: (playerNum = 1) => {
+      const dev = playerNum === 1 ? activeDeviceP1 : activeDeviceP2;
+      if (dev === "TOUCH") {
+        return `P${playerNum}: [TOUCH JOYSTICK] Move | [VIRTUAL BUTTONS] Jump / Punch`;
+      } else if (dev === "GAMEPAD") {
+        return `P${playerNum}: [DPAD / LEFT STICK] Move | [A] Jump | [X] Punch`;
       }
-      return false;
+      if (playerNum === 1) {
+        return `P1: [WASD / ARROW KEYS] Move | [SPACE] Jump | [F / ENTER] Punch`;
+      } else {
+        return `P2: [DEFAULT NONE] Connect 2nd Controller for P2`;
+      }
+    },
+
+    pollMenuNav: () => {
+      if (gpMenuDebounce > 0) {
+        gpMenuDebounce--;
+        return { up: false, down: false, left: false, right: false, confirm: false, back: false };
+      }
+
+      let nav = { up: false, down: false, left: false, right: false, confirm: false, back: false };
+
+      // Keyboard Menu Nav
+      if (justPressedKeys["ArrowUp"] || justPressedKeys["KeyW"]) nav.up = true;
+      if (justPressedKeys["ArrowDown"] || justPressedKeys["KeyS"]) nav.down = true;
+      if (justPressedKeys["ArrowLeft"] || justPressedKeys["KeyA"]) nav.left = true;
+      if (justPressedKeys["ArrowRight"] || justPressedKeys["KeyD"]) nav.right = true;
+      if (justPressedKeys["Enter"] || justPressedKeys["Space"] || justPressedKeys["KeyF"]) nav.confirm = true;
+      if (justPressedKeys["Escape"] || justPressedKeys["Backspace"]) nav.back = true;
+
+      // Universal Gamepad Menu Nav (Iron Tide Pattern)
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (gp && gp.connected) {
+          const axisX = gp.axes[0] || 0;
+          const axisY = gp.axes[1] || 0;
+          const dUp = gp.buttons[12]?.pressed || axisY < -0.45;
+          const dDown = gp.buttons[13]?.pressed || axisY > 0.45;
+          const dLeft = gp.buttons[14]?.pressed || axisX < -0.45;
+          const dRight = gp.buttons[15]?.pressed || axisX > 0.45;
+          const btnA = gp.buttons[0]?.pressed || gp.buttons[9]?.pressed; // A or Start
+          const btnB = gp.buttons[1]?.pressed || gp.buttons[8]?.pressed; // B or Select
+
+          if (dUp) { nav.up = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+          if (dDown) { nav.down = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+          if (dLeft) { nav.left = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+          if (dRight) { nav.right = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+          if (btnA) { nav.confirm = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+          if (btnB) { nav.back = true; if (i === 0) activeDeviceP1 = "GAMEPAD"; }
+        }
+      }
+
+      if (nav.up || nav.down || nav.left || nav.right || nav.confirm || nav.back) {
+        gpMenuDebounce = 12; // 12-frame repeat delay (~200ms)
+      }
+
+      return nav;
+    },
+    isConfirmPressed: (playerNum = 1) => {
+      if (playerNum === 1) {
+        if (pointerClicked) return true;
+        if (justPressedKeys["Enter"] || justPressedKeys["Space"] || justPressedKeys["KeyF"]) return true;
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp1 = gamepads[0];
+        if (gp1 && gp1.connected) {
+          if (gp1.buttons[0]?.pressed || gp1.buttons[1]?.pressed || gp1.buttons[9]?.pressed) return true;
+        }
+        return false;
+      } else {
+        // Player 2 confirms ONLY via Gamepad 2 (or Gamepad 1 if P1 is Keyboard)
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gpIdx = activeDeviceP1 === "GAMEPAD" ? 1 : 0;
+        const gp2 = gamepads[gpIdx];
+        if (gp2 && gp2.connected) {
+          if (gp2.buttons[0]?.pressed || gp2.buttons[1]?.pressed || gp2.buttons[9]?.pressed) return true;
+        }
+        return false;
+      }
     },
     setRemoteP2Input: (remoteInput) => {
       window.MetroMonstersRemoteP2Input = remoteInput;
@@ -662,51 +831,73 @@ MetroMonsters.Input = (() => {
           wasPressed: inp.wasPressed || { up: false, down: false, left: false, right: false, punch: false, jump: false }
         };
       }
-      const isDown = { up: false, down: false, left: false, right: false, punch: false, jump: false };
-      const wasPressed = { up: false, down: false, left: false, right: false, punch: false, jump: false };
-      
-      const mapping = playerNum === 1 ? MetroMonsters.Constants.CONTROLS.P1_KEYBOARD : MetroMonsters.Constants.CONTROLS.P2_KEYBOARD;
 
-      const isUp = keys[mapping.UP] || (playerNum === 1 && keys["ArrowUp"]);
-      const isDownKey = keys[mapping.DOWN] || (playerNum === 1 && keys["ArrowDown"]);
-      const isLeft = keys[mapping.LEFT] || (playerNum === 1 && keys["ArrowLeft"]);
-      const isRight = keys[mapping.RIGHT] || (playerNum === 1 && keys["ArrowRight"]);
-      const isPunch = keys[mapping.PUNCH] || (playerNum === 1 && keys["KeyF"]);
-      const isJump = keys[mapping.JUMP] || keys["Space"] || (playerNum === 1 && keys["KeyG"]);
+      const res = {
+        isDown: { up: false, down: false, left: false, right: false, punch: false, jump: false },
+        wasPressed: { up: false, down: false, left: false, right: false, punch: false, jump: false }
+      };
 
-      const pUp = justPressedKeys[mapping.UP] || (playerNum === 1 && justPressedKeys["ArrowUp"]);
-      const pDown = justPressedKeys[mapping.DOWN] || (playerNum === 1 && justPressedKeys["ArrowDown"]);
-      const pLeft = justPressedKeys[mapping.LEFT] || (playerNum === 1 && justPressedKeys["ArrowLeft"]);
-      const pRight = justPressedKeys[mapping.RIGHT] || (playerNum === 1 && justPressedKeys["ArrowRight"]);
-      const pPunch = justPressedKeys[mapping.PUNCH] || (playerNum === 1 && justPressedKeys["KeyF"]);
-      const pJump = justPressedKeys[mapping.JUMP] || justPressedKeys["Space"] || (playerNum === 1 && justPressedKeys["KeyG"]);
+      if (playerNum === 1) {
+        // Player 1: Keyboard (WASD & Arrow Keys + Space/F/Enter) + Touch Joystick/Buttons + Gamepad 1
+        const upK = checkKeys(["KeyW", "ArrowUp"]);
+        const downK = checkKeys(["KeyS", "ArrowDown"]);
+        const leftK = checkKeys(["KeyA", "ArrowLeft"]);
+        const rightK = checkKeys(["KeyD", "ArrowRight"]);
+        const jumpK = checkKeys(["Space"]);
+        const punchK = checkKeys(["KeyF", "Enter"]);
 
-      if (isUp) isDown.up = true;
-      if (isDownKey) isDown.down = true;
-      if (isLeft) isDown.left = true;
-      if (isRight) isDown.right = true;
-      if (isPunch) isDown.punch = true;
-      if (isJump) isDown.jump = true;
+        res.isDown.up = upK.isDown || touchStick.dir.up;
+        res.wasPressed.up = upK.wasPressed || touchStick.dir.up;
 
-      if (pUp) wasPressed.up = true;
-      if (pDown) wasPressed.down = true;
-      if (pLeft) wasPressed.left = true;
-      if (pRight) wasPressed.right = true;
-      if (pPunch) wasPressed.punch = true;
-      if (pJump) wasPressed.jump = true;
+        res.isDown.down = downK.isDown || touchStick.dir.down;
+        res.wasPressed.down = downK.wasPressed || touchStick.dir.down;
 
-      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const gp = gamepads[playerNum - 1];
-      if (gp && gp.connected) {
-        if (gp.axes[1] < -0.4 || gp.buttons[12]?.pressed) { isDown.up = true; wasPressed.up = true; }
-        if (gp.axes[1] > 0.4 || gp.buttons[13]?.pressed) { isDown.down = true; wasPressed.down = true; }
-        if (gp.axes[0] < -0.4 || gp.buttons[14]?.pressed) { isDown.left = true; wasPressed.left = true; }
-        if (gp.axes[0] > 0.4 || gp.buttons[15]?.pressed) { isDown.right = true; wasPressed.right = true; }
-        if (gp.buttons[0]?.pressed) { isDown.punch = true; wasPressed.punch = true; }
-        if (gp.buttons[1]?.pressed) { isDown.jump = true; wasPressed.jump = true; }
+        res.isDown.left = leftK.isDown || touchStick.dir.left;
+        res.wasPressed.left = leftK.wasPressed || touchStick.dir.left;
+
+        res.isDown.right = rightK.isDown || touchStick.dir.right;
+        res.wasPressed.right = rightK.wasPressed || touchStick.dir.right;
+
+        res.isDown.jump = jumpK.isDown || touchButtons.jump;
+        res.wasPressed.jump = jumpK.wasPressed || touchButtons.jumpPressed;
+
+        res.isDown.punch = punchK.isDown || touchButtons.punch;
+        res.wasPressed.punch = punchK.wasPressed || touchButtons.punchPressed;
+
+        // Check Gamepad 1 for Player 1
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp1 = gamepads[0];
+        if (gp1 && gp1.connected) {
+          const axisX = gp1.axes[0] || 0;
+          const axisY = gp1.axes[1] || 0;
+          if (gp1.buttons[12]?.pressed || axisY < -0.45) { res.isDown.up = true; res.wasPressed.up = true; activeDeviceP1 = "GAMEPAD"; }
+          if (gp1.buttons[13]?.pressed || axisY > 0.45) { res.isDown.down = true; res.wasPressed.down = true; activeDeviceP1 = "GAMEPAD"; }
+          if (gp1.buttons[14]?.pressed || axisX < -0.45) { res.isDown.left = true; res.wasPressed.left = true; activeDeviceP1 = "GAMEPAD"; }
+          if (gp1.buttons[15]?.pressed || axisX > 0.45) { res.isDown.right = true; res.wasPressed.right = true; activeDeviceP1 = "GAMEPAD"; }
+          if (gp1.buttons[0]?.pressed) { res.isDown.jump = true; res.wasPressed.jump = true; activeDeviceP1 = "GAMEPAD"; }
+          if (gp1.buttons[2]?.pressed || gp1.buttons[1]?.pressed) { res.isDown.punch = true; res.wasPressed.punch = true; activeDeviceP1 = "GAMEPAD"; }
+        }
+
+        return res;
+      } else {
+        // Player 2: Default is NONE (unless 2 controllers connected -> Gamepad 2, or assigned in Settings, or Online P2P)
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        // Gamepad 1 goes to P1 by default. P2 ONLY receives Gamepad 2 if at least 2 controllers are connected!
+        const gp2 = (gamepads.length >= 2 && gamepads[1] && gamepads[1].connected) ? gamepads[1] : null;
+
+        if (gp2 && gp2.connected) {
+          const axisX = gp2.axes[0] || 0;
+          const axisY = gp2.axes[1] || 0;
+          if (gp2.buttons[12]?.pressed || axisY < -0.45) { res.isDown.up = true; res.wasPressed.up = true; activeDeviceP2 = "GAMEPAD"; }
+          if (gp2.buttons[13]?.pressed || axisY > 0.45) { res.isDown.down = true; res.wasPressed.down = true; activeDeviceP2 = "GAMEPAD"; }
+          if (gp2.buttons[14]?.pressed || axisX < -0.45) { res.isDown.left = true; res.wasPressed.left = true; activeDeviceP2 = "GAMEPAD"; }
+          if (gp2.buttons[15]?.pressed || axisX > 0.45) { res.isDown.right = true; res.wasPressed.right = true; activeDeviceP2 = "GAMEPAD"; }
+          if (gp2.buttons[0]?.pressed) { res.isDown.jump = true; res.wasPressed.jump = true; activeDeviceP2 = "GAMEPAD"; }
+          if (gp2.buttons[2]?.pressed || gp2.buttons[1]?.pressed) { res.isDown.punch = true; res.wasPressed.punch = true; activeDeviceP2 = "GAMEPAD"; }
+        }
+
+        return res;
       }
-
-      return { isDown, wasPressed };
     },
     wasPausePressed: () => !!(justPressedKeys["KeyP"] || justPressedKeys["Escape"] || justPressedKeys["Pause"])
   });
@@ -2797,6 +2988,7 @@ MetroMonsters.UI = (() => {
 
   return Object.freeze({
     getGameMode: () => gameMode,
+    setGameMode: (m) => { gameMode = m; },
     updateTitle: () => {
       const p1 = MetroMonsters.Input.getPlayerInput(1);
       const click = MetroMonsters.Input.getClickPos();
@@ -2898,24 +3090,24 @@ MetroMonsters.UI = (() => {
 
       ctx.fillStyle = "#ffcc00";
       ctx.font = "bold 24px 'Courier New', monospace";
-      ctx.fillText("MODERN RETRO ARCADE EDITION", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 190);
+      ctx.fillText("RETRO WEB ARCADE EDITION", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 190);
 
-      ctx.fillStyle = gameMode === 1 ? "rgba(255, 204, 0, 0.25)" : "rgba(30, 41, 59, 0.75)";
-      ctx.fillRect(400, 260, 480, 60);
-      ctx.strokeStyle = gameMode === 1 ? "#ffcc00" : "#475569";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(400, 260, 480, 60);
-      ctx.fillStyle = gameMode === 1 ? "#ffcc00" : "#cbd5e1";
-      ctx.font = "bold 24px 'Courier New', monospace";
-      ctx.fillText("LOCAL MODE", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 298);
+      // 3 Title Menu Options: 1. LOCAL MODE, 2. ONLINE MULTIPLAYER, 3. SETTINGS
+      const options = ["LOCAL MODE", "ONLINE MULTIPLAYER", "SETTINGS"];
+      options.forEach((optText, idx) => {
+        const boxY = 240 + idx * 80;
+        const isSel = (gameMode - 1) === idx;
 
-      ctx.fillStyle = gameMode === 2 ? "rgba(0, 255, 127, 0.25)" : "rgba(30, 41, 59, 0.75)";
-      ctx.fillRect(400, 350, 480, 60);
-      ctx.strokeStyle = gameMode === 2 ? "#00ff7f" : "#475569";
-      ctx.strokeRect(400, 350, 480, 60);
-      ctx.fillStyle = gameMode === 2 ? "#00ff7f" : "#cbd5e1";
-      ctx.font = "bold 24px 'Courier New', monospace";
-      ctx.fillText("ONLINE MULTIPLAYER", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 388);
+        ctx.fillStyle = isSel ? "rgba(255, 204, 0, 0.3)" : "rgba(30, 41, 59, 0.75)";
+        ctx.fillRect(400, boxY, 480, 56);
+        ctx.strokeStyle = isSel ? "#ffcc00" : "#475569";
+        ctx.lineWidth = isSel ? 4 : 2;
+        ctx.strokeRect(400, boxY, 480, 56);
+
+        ctx.fillStyle = isSel ? "#ffcc00" : "#cbd5e1";
+        ctx.font = "bold 22px 'Courier New', monospace";
+        ctx.fillText(optText, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, boxY + 35);
+      });
 
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 26px 'Courier New', monospace";
@@ -2923,8 +3115,8 @@ MetroMonsters.UI = (() => {
 
       ctx.fillStyle = "#94a3b8";
       ctx.font = "16px 'Courier New', monospace";
-      ctx.fillText("P1: A/D Walk Left/Right | S Face Front | SPACEBAR Jump | W Climb Wall", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 600);
-      ctx.fillText("P2: Arrow Keys Walk/Down | M Jump | N Punch | Up Climb Wall", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 630);
+      ctx.fillText("P1: [WASD / ARROWS] Move & Climb | [SPACE] Jump | [F / ENTER] Punch", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 600);
+      ctx.fillText("P2: [DEFAULT: NONE] Connect 2nd Controller or Assign in Settings for P2", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 630);
     },
     updateSelectLobby: () => {
       const p1 = MetroMonsters.Input.getPlayerInput(1);
@@ -3047,6 +3239,92 @@ MetroMonsters.UI = (() => {
         ctx.fillText(charConfig.name, cardX + 70, cardY + 155);
       });
       ctx.restore();
+    },
+        renderSettingsMenu: (ctx, highlightIdx) => {
+      MetroMonsters.UI.renderTitleBackground(ctx);
+
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "900 52px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("SETTINGS", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 110);
+
+      const sfx = MetroMonsters.Constants.AUDIO.SFX_ENABLED ? "ON" : "OFF";
+      const bgm = MetroMonsters.Constants.AUDIO.MUSIC_ENABLED ? "ON" : "OFF";
+      const crt = document.getElementById("crt-overlay")?.classList.contains("disabled") ? "OFF" : "ON";
+
+      const items = [
+        `SOUND EFFECTS: [ ${sfx} ]`,
+        `MUSIC BGM: [ ${bgm} ]`,
+        `CRT SCANLINES: [ ${crt} ]`,
+        "CONTROLS SETUP",
+        "BACK TO TITLE"
+      ];
+
+      items.forEach((itemText, idx) => {
+        const boxY = 180 + idx * 68;
+        const isSel = highlightIdx === idx;
+
+        ctx.fillStyle = isSel ? "rgba(255, 204, 0, 0.3)" : "rgba(30, 41, 59, 0.85)";
+        ctx.fillRect(360, boxY, 560, 52);
+        ctx.strokeStyle = isSel ? "#ffcc00" : "#475569";
+        ctx.lineWidth = isSel ? 4 : 2;
+        ctx.strokeRect(360, boxY, 560, 52);
+
+        ctx.fillStyle = isSel ? "#ffcc00" : "#e2e8f0";
+        ctx.font = "bold 20px 'Courier New', monospace";
+        ctx.fillText(itemText, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, boxY + 33);
+      });
+
+      ctx.fillStyle = "#94a3b8"; ctx.font = "14px 'Courier New', monospace";
+      ctx.fillText("NAVIGATE: [DPAD / STICK / ARROWS]  |  SELECT: [A / ENTER]  |  BACK: [B / ESC]", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 580);
+    },
+
+    renderControlsMenu: (ctx, highlightIdx) => {
+      MetroMonsters.UI.renderTitleBackground(ctx);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "900 48px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("CONTROLS SETUP", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 105);
+
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp1 = gamepads[0] ? `CONNECTED (${gamepads[0].id.slice(0, 16)})` : "NONE DETECTED";
+      const gp2 = gamepads[1] ? `CONNECTED (${gamepads[1].id.slice(0, 16)})` : "NONE DETECTED";
+
+      ctx.fillStyle = "#94a3b8"; ctx.font = "14px 'Courier New', monospace";
+      ctx.fillText(`GP 1: ${gp1}  |  GP 2: ${gp2}`, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 145);
+
+      const p1Dev = MetroMonsters.Input.getActiveDeviceP1();
+      const p2Dev = MetroMonsters.Input.getActiveDeviceP2();
+      const touchActive = MetroMonsters.Input.isTouchActive() ? "ON" : "OFF";
+
+      const items = [
+        `P1 METHOD: [ ${p1Dev} ]`,
+        `P2 METHOD: [ GAMEPAD REQUIRED ]`,
+        `TOUCH CONTROLS: [ ${touchActive} ]`,
+        "BACK TO SETTINGS"
+      ];
+
+      items.forEach((itemText, idx) => {
+        const boxY = 180 + idx * 72;
+        const isSel = highlightIdx === idx;
+
+        ctx.fillStyle = isSel ? "rgba(0, 255, 127, 0.3)" : "rgba(30, 41, 59, 0.85)";
+        ctx.fillRect(340, boxY, 600, 54);
+        ctx.strokeStyle = isSel ? "#00ff7f" : "#475569";
+        ctx.lineWidth = isSel ? 4 : 2;
+        ctx.strokeRect(340, boxY, 600, 54);
+
+        ctx.fillStyle = isSel ? "#00ff7f" : "#e2e8f0";
+        ctx.font = "bold 20px 'Courier New', monospace";
+        ctx.fillText(itemText, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, boxY + 34);
+      });
+
+      ctx.fillStyle = "#e2e8f0"; ctx.font = "14px 'Courier New', monospace";
+      ctx.fillText("KEYBOARD & MOUSE DRIVES P1 ONLY | P2 REQUIRES GAMEPAD / ONLINE", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 520);
+
+      ctx.fillStyle = "#94a3b8"; ctx.font = "14px 'Courier New', monospace";
+      ctx.fillText("NAVIGATE: [DPAD / STICK / ARROWS]  |  CHANGE: [A / ENTER]  |  BACK: [B / ESC]", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 580);
     },
     renderOnlineMenu: (ctx, onlineSubState, roomCodeInput) => {
       MetroMonsters.UI.renderTitleBackground(ctx);
@@ -3655,6 +3933,8 @@ MetroMonsters.Engine = (() => {
   let onlineSubState = "MAIN"; // MAIN, HOST_WAIT, JOIN_INPUT
   let roomCodeInput = "";
   let dropInSelectIdx = 1;
+  let settingsHighlightIdx = 0;
+  let controlsHighlightIdx = 0;
   let p1Monster = null;
   let p2Monster = null;
   let currentStageIndex = 0;
@@ -3680,14 +3960,85 @@ MetroMonsters.Engine = (() => {
 
     if (state === "TITLE") {
       MetroMonsters.UI.updateTitle();
-      if (MetroMonsters.Input.isConfirmPressed(1)) {
+      const nav = MetroMonsters.Input.pollMenuNav();
+
+      if (nav.up) {
+        let mode = MetroMonsters.UI.getGameMode();
+        mode = mode === 1 ? 3 : mode - 1;
+        MetroMonsters.UI.setGameMode(mode);
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+      if (nav.down) {
+        let mode = MetroMonsters.UI.getGameMode();
+        mode = mode === 3 ? 1 : mode + 1;
+        MetroMonsters.UI.setGameMode(mode);
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+
+      if (nav.confirm || MetroMonsters.Input.isConfirmPressed(1)) {
         MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
-        if (MetroMonsters.UI.getGameMode() === 2) {
+        const mode = MetroMonsters.UI.getGameMode();
+        if (mode === 1) {
+          state = "SELECT";
+        } else if (mode === 2) {
           state = "ONLINE_MENU";
           onlineSubState = "MAIN";
           roomCodeInput = "";
-        } else {
-          state = "SELECT";
+        } else if (mode === 3) {
+          state = "SETTINGS";
+          settingsHighlightIdx = 0;
+        }
+        MetroMonsters.Input.clearPressed();
+      }
+    } else if (state === "SETTINGS") {
+      const nav = MetroMonsters.Input.pollMenuNav();
+      if (nav.up) {
+        settingsHighlightIdx = (settingsHighlightIdx + 4) % 5;
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+      if (nav.down) {
+        settingsHighlightIdx = (settingsHighlightIdx + 1) % 5;
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+      if (nav.back) {
+        state = "TITLE";
+        MetroMonsters.Audio.playTone(350, 'square', 0.1, 0.2);
+      }
+      if (nav.confirm) {
+        MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+        if (settingsHighlightIdx === 0) {
+          MetroMonsters.Constants.AUDIO.SFX_ENABLED = !MetroMonsters.Constants.AUDIO.SFX_ENABLED;
+        } else if (settingsHighlightIdx === 1) {
+          MetroMonsters.Constants.AUDIO.MUSIC_ENABLED = !MetroMonsters.Constants.AUDIO.MUSIC_ENABLED;
+        } else if (settingsHighlightIdx === 2) {
+          const crt = document.getElementById("crt-overlay");
+          if (crt) crt.classList.toggle("disabled");
+        } else if (settingsHighlightIdx === 3) {
+          state = "CONTROLS_MENU";
+          controlsHighlightIdx = 0;
+        } else if (settingsHighlightIdx === 4) {
+          state = "TITLE";
+        }
+        MetroMonsters.Input.clearPressed();
+      }
+    } else if (state === "CONTROLS_MENU") {
+      const nav = MetroMonsters.Input.pollMenuNav();
+      if (nav.up) {
+        controlsHighlightIdx = (controlsHighlightIdx + 3) % 4;
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+      if (nav.down) {
+        controlsHighlightIdx = (controlsHighlightIdx + 1) % 4;
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+      if (nav.back) {
+        state = "SETTINGS";
+        MetroMonsters.Audio.playTone(350, 'square', 0.1, 0.2);
+      }
+      if (nav.confirm) {
+        MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+        if (controlsHighlightIdx === 3) {
+          state = "SETTINGS";
         }
         MetroMonsters.Input.clearPressed();
       }
@@ -3754,11 +4105,12 @@ MetroMonsters.Engine = (() => {
       const p2Input = MetroMonsters.Input.getPlayerInput(2);
       const isConfirmKey = p1Input.wasPressed.punch || p1Input.wasPressed.jump || p2Input.wasPressed.punch || p2Input.wasPressed.jump;
 
-      if (isConfirmKey || MetroMonsters.Input.isConfirmPressed(1) || MetroMonsters.Input.isConfirmPressed(2)) {
+      if (isConfirmKey || MetroMonsters.Input.isConfirmPressed(1)) {
         const chosen = MetroMonsters.UI.getSelectedRoster();
         const is2P = MetroMonsters.UI.getGameMode() === 2;
         currentStageIndex = 0;
         p1Monster = new MetroMonsters.Entities.Monster(1, chosen.p1, false);
+        // Only spawn P2 monster if explicitly in 2P Online or if P2 dropped in with a secondary controller!
         p2Monster = is2P ? new MetroMonsters.Entities.Monster(2, chosen.p2, false) : null;
         MetroMonsters.BuildingManager.loadStage(currentStageIndex);
         MetroMonsters.AIDirector.init(currentStageIndex);
@@ -3775,7 +4127,7 @@ MetroMonsters.Engine = (() => {
         }
       }
 
-      // Check Player 2 Arcade Mid-Game Drop-In!
+      // Check Player 2 Arcade Mid-Game Drop-In (ONLY via Gamepad P2 or Gamepad P2, NEVER Keyboard)!
       if (!p2Monster && MetroMonsters.UI.getGameMode() === 1) {
         const p2Input = MetroMonsters.Input.getPlayerInput(2);
         if (p2Input.wasPressed.jump || p2Input.wasPressed.punch) {
@@ -3857,6 +4209,10 @@ MetroMonsters.Engine = (() => {
 
     if (state === "TITLE") {
       MetroMonsters.UI.renderTitle(ctx);
+    } else if (state === "SETTINGS") {
+      MetroMonsters.UI.renderSettingsMenu(ctx, settingsHighlightIdx);
+    } else if (state === "CONTROLS_MENU") {
+      MetroMonsters.UI.renderControlsMenu(ctx, controlsHighlightIdx);
     } else if (state === "ONLINE_MENU") {
       MetroMonsters.UI.renderOnlineMenu(ctx, onlineSubState, roomCodeInput);
     } else if (state === "SELECT") {
@@ -3879,6 +4235,39 @@ MetroMonsters.Engine = (() => {
         MetroMonsters.UI.renderPause(ctx);
       } else if (state === "DROPIN_SELECT") {
         MetroMonsters.UI.renderDropInOverlay(ctx, dropInSelectIdx);
+      }
+
+      // Render Mobile Touch Virtual Joystick & Touch Action Buttons
+      if (MetroMonsters.Input.isTouchActive()) {
+        const stick = MetroMonsters.Input.getTouchStick();
+        const btns = MetroMonsters.Input.getTouchButtons();
+
+        ctx.save();
+        // Virtual Joystick Base (Bottom Left)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.beginPath(); ctx.arc(140, 580, 60, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = 3; ctx.stroke();
+
+        // Virtual Joystick Thumb Nub
+        const thumbX = stick.active ? stick.currX : 140;
+        const thumbY = stick.active ? stick.currY : 580;
+        ctx.fillStyle = stick.active ? "rgba(0, 255, 127, 0.6)" : "rgba(255, 255, 255, 0.4)";
+        ctx.beginPath(); ctx.arc(thumbX, thumbY, 26, 0, Math.PI * 2); ctx.fill();
+
+        // Touch Jump Button (Bottom Right)
+        ctx.fillStyle = btns.jump ? "rgba(255, 204, 0, 0.8)" : "rgba(255, 204, 0, 0.35)";
+        ctx.beginPath(); ctx.arc(1100, 580, 45, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 3; ctx.stroke();
+        ctx.fillStyle = "#000"; ctx.font = "bold 16px 'Courier New', monospace"; ctx.textAlign = "center";
+        ctx.fillText("JUMP", 1100, 586);
+
+        // Touch Punch Button (Bottom Right)
+        ctx.fillStyle = btns.punch ? "rgba(255, 23, 68, 0.8)" : "rgba(255, 23, 68, 0.35)";
+        ctx.beginPath(); ctx.arc(1200, 540, 45, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#ff1744"; ctx.lineWidth = 3; ctx.stroke();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Courier New', monospace"; ctx.textAlign = "center";
+        ctx.fillText("PUNCH", 1200, 546);
+        ctx.restore();
       }
     }
   }
@@ -3970,10 +4359,12 @@ MetroMonsters.Bootstrap = (() => {
 
     const crtOverlay = document.getElementById("crt-overlay");
     const crtBtn = document.getElementById("crt-toggle-btn");
-    crtBtn.addEventListener("click", () => {
-      crtOverlay.classList.toggle("disabled");
-      crtBtn.textContent = crtOverlay.classList.contains("disabled") ? "CRT: OFF" : "CRT: ON";
-    });
+    if (crtBtn && crtOverlay) {
+      crtBtn.addEventListener("click", () => {
+        crtOverlay.classList.toggle("disabled");
+        crtBtn.textContent = crtOverlay.classList.contains("disabled") ? "CRT: OFF" : "CRT: ON";
+      });
+    }
 
     const sfxBtn = document.getElementById("sfx-toggle-btn");
     if (sfxBtn) {
