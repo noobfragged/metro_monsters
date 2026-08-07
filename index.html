@@ -1,0 +1,3540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>METRO MONSTERS ARCHIVE â€” Ultimate Modern 2D Web Arcade</title>
+<style>
+/* ===== CSS STYLESHEET & GAME SHELL CONTAINER ===== */
+:root {
+  --bg-deep: #05050a;
+  --title-red: #ff2233;
+  --gold: #ffcc00;
+  --gold-glow: rgba(255, 204, 0, 0.6);
+  --neon-green: #39ff14;
+  --hud-bg: rgba(10, 14, 26, 0.92);
+  --hud-border: #475569;
+  --font-arcade: 'Courier New', Courier, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #030712; font-family: var(--font-arcade); color: #fff; }
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+  touch-action: none;
+}
+
+#game-wrapper {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transform-origin: center center;
+  flex-shrink: 0;
+}
+
+#game-container {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 4px solid #1e293b;
+  border-radius: 8px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 204, 0, 0.15);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+canvas#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* CRT Scanline Shader Overlay */
+#crt-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.18) 0px,
+    rgba(0, 0, 0, 0.18) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.7);
+  transition: opacity 0.3s;
+}
+
+#crt-overlay.disabled { opacity: 0; }
+
+.top-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 25;
+  display: flex;
+  gap: 8px;
+}
+
+.arcade-btn {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1.5px solid #475569;
+  color: #e2e8f0;
+  font-family: var(--font-arcade);
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+}
+
+.arcade-btn:hover {
+  border-color: var(--gold);
+  color: #fff;
+  transform: translateY(-1px);
+}
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <div id="game-container">
+    <canvas id="game-canvas" width="1280" height="720"></canvas>
+    <div id="crt-overlay"></div>
+    
+    <div class="top-controls">
+      <button id="pause-btn" class="arcade-btn">PAUSE [P]</button>
+      <button id="sfx-toggle-btn" class="arcade-btn">SOUNDS: ON</button>
+      <button id="music-toggle-btn" class="arcade-btn">MUSIC: ON</button>
+      <button id="crt-toggle-btn" class="arcade-btn">CRT: ON</button>
+      <button id="fullscreen-btn" class="arcade-btn">FULLSCREEN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== ================
+   METRO MONSTERS ULTIMATE â€” DYNAMIC CITIES, HELICOPTERS & INTERACTIVE ITEMS ENGINE
+   ============================================================================
+   Strict Arcade Enhancements:
+   - Dynamic City Skylines & Time of Day (Chicago Sunset, New York Midnight,
+     Los Angeles Palm Coast, San Francisco Foggy Dawn, Tokyo Cyber Neon!).
+   - Attack Helicopters: Spawn flying across upper sky, firing down at monsters!
+   - Interactive Window Objects: Showers (+25 HP), Live Electric Wires (-10 HP Shock!),
+     Hot Chili Peppers (Fire Breathing Powerup!), Food (+15 HP), Dynamite (-12 HP!).
+   - Reduced Damage by 50%: Tank shell 7 HP, bullets 2 HP, collapse 12 HP.
+   - Reduced Ground Civilians by 50%: 5 active pedestrians with diverse SVG art.
+   - 3D Armored Tank Turret & Apache Helicopter SVG vector graphics.
+   ================ ===== */
+
+window.MetroMonsters = window.MetroMonsters || {};
+
+/* ===== ARCHITECTURE MANIFEST ===== */
+MetroMonsters.Manifest = {
+  name: "Metro Monsters Web Arcade Ultimate",
+  version: "7.0.0-CITIES-HELIS-POWERUPS",
+  author: "Antigravity Pair Programmer",
+  buildTarget: "Single-File HTML5 2D Canvas + Web Audio + Dual Gamepad API"
+};
+
+/* ===== CONSTANTS REGISTRY ===== */
+MetroMonsters.Constants = Object.freeze({
+  VIEWPORT: {
+    WIDTH: 1280,
+    HEIGHT: 720,
+    ASPECT_RATIO: 16 / 9,
+    ROAD_Y: 580,
+    SKY_HEIGHT: 580
+  },
+
+  PHYSICS: {
+    GRAVITY: 0.09,       // Super floaty slow-motion magic arcade gravity
+    MAX_FALL_SPEED: 4.2, // Smooth, slow fall speed cap
+    GROUND_FRICTION: 0.85,
+    CLIMB_SPEED_Y: 1.8,
+    CLIMB_SPEED_X: 1.6,
+    WALK_SPEED: 1.8,
+    JUMP_FORCE: -7.2,    // Floaty 4-story high arcade leap (never flies off screen)
+    COLLAPSE_DAMAGE: 12
+  },
+
+  ROSTER: {
+    MANNY: {
+      id: "manny",
+      name: "MANNY",
+      title: "GIANT GORILLA",
+      color: "#5c341e",
+      accentColor: "#ffcc00",
+      punchDamage: 35,
+      climbSpeedMult: 1.0,
+      svgPath: "images/manny_gorilla.svg"
+    },
+    LIZ: {
+      id: "liz",
+      name: "LIZ",
+      title: "GIANT LIZARD",
+      color: "#2e7d32",
+      accentColor: "#00ff7f",
+      punchDamage: 30,
+      climbSpeedMult: 1.15,
+      svgPath: "images/liz_lizard.svg"
+    },
+    LYALL: {
+      id: "lyall",
+      name: "LYALL",
+      title: "GIANT WEREWOLF",
+      color: "#546e7a",
+      accentColor: "#ff1744",
+      punchDamage: 30,
+      climbSpeedMult: 1.25,
+      svgPath: "images/lyall_werewolf.svg"
+    }
+  },
+
+  CONTROLS: {
+    P1_KEYBOARD: {
+      UP: "KeyW", DOWN: "KeyS", LEFT: "KeyA", RIGHT: "KeyD",
+      PUNCH: "KeyF", JUMP: "Space"
+    },
+    P2_KEYBOARD: {
+      UP: "ArrowUp", DOWN: "ArrowDown", LEFT: "ArrowLeft", RIGHT: "ArrowRight",
+      PUNCH: "KeyN", JUMP: "KeyM"
+    },
+    GAMEPAD_BUTTONS: {
+      PUNCH: 0,
+      JUMP: 1,
+      START: 9
+    }
+  },
+
+  AUDIO: {
+    MASTER_VOLUME: 0.35,
+    SFX_ENABLED: true,
+    MUSIC_ENABLED: true,
+    ENABLED: true
+  },
+
+  BUILDINGS: {
+    COLLAPSE_THRESHOLD: 0.35,
+    TILE_SIZE: 48,
+    FLOOR_HEIGHT: 64,
+    WINDOW_WIDTH: 40,
+    WINDOW_HEIGHT: 48
+  },
+
+    STAGES: [
+    { day: 1, cityName: "CHICAGO", skyTheme: { top: "#12082b", mid: "#4a154b", bottom: "#d97706", moonColor: "#fef3c7", moonType: "crescent", silhouetteColor: "rgba(15, 23, 42, 0.65)" }, buildings: [{ id: "b1", x: 160, width: 240, floors: 6, cols: 3, color: "#8d6e63" }, { id: "b2", x: 500, width: 280, floors: 7, cols: 4, color: "#475569" }, { id: "b3", x: 880, width: 240, floors: 5, cols: 3, color: "#78909c" }] },
+    { day: 2, cityName: "NEW YORK", skyTheme: { top: "#030712", mid: "#0f172a", bottom: "#1e1b4b", moonColor: "#e2e8f0", moonType: "full", silhouetteColor: "rgba(30, 41, 59, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#b45309" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#451a03" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#94a3b8" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#78350f" }] },
+    { day: 3, cityName: "TORONTO", skyTheme: { top: "#0c1427", mid: "#1e293b", bottom: "#0284c7", moonColor: "#e0f2fe", moonType: "crescent", silhouetteColor: "rgba(15, 23, 42, 0.75)" }, buildings: [{ id: "b1", x: 110, width: 220, floors: 6, cols: 3, color: "#0369a1" }, { id: "b2", x: 390, width: 240, floors: 7, cols: 4, color: "#475569" }, { id: "b3", x: 690, width: 220, floors: 6, cols: 3, color: "#b45309" }, { id: "b4", x: 970, width: 210, floors: 5, cols: 3, color: "#075985" }] },
+    { day: 4, cityName: "LOS ANGELES", skyTheme: { top: "#451a03", mid: "#c2410c", bottom: "#f59e0b", moonColor: "#fef08a", moonType: "sun", silhouetteColor: "rgba(69, 26, 3, 0.75)" }, buildings: [{ id: "b1", x: 140, width: 260, floors: 5, cols: 4, color: "#d97706" }, { id: "b2", x: 480, width: 280, floors: 7, cols: 4, color: "#b45309" }, { id: "b3", x: 840, width: 280, floors: 6, cols: 4, color: "#f59e0b" }] },
+    { day: 5, cityName: "MONTERREY", skyTheme: { top: "#451a03", mid: "#9a3412", bottom: "#d97706", moonColor: "#fde047", moonType: "sun", silhouetteColor: "rgba(69, 26, 3, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#b45309" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#d97706" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#92400e" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#78350f" }] },
+    { day: 6, cityName: "SAN FRANCISCO", skyTheme: { top: "#0f172a", mid: "#334155", bottom: "#f43f5e", moonColor: "#fed7aa", moonType: "dawn", silhouetteColor: "rgba(15, 23, 42, 0.7)" }, buildings: [{ id: "b1", x: 120, width: 220, floors: 6, cols: 3, color: "#0f766e" }, { id: "b2", x: 400, width: 240, floors: 7, cols: 4, color: "#115e59" }, { id: "b3", x: 700, width: 220, floors: 5, cols: 3, color: "#14b8a6" }, { id: "b4", x: 980, width: 200, floors: 6, cols: 3, color: "#047857" }] },
+    { day: 7, cityName: "SEATTLE", skyTheme: { top: "#0b132b", mid: "#1c2541", bottom: "#3a506b", moonColor: "#e2e8f0", moonType: "crescent", silhouetteColor: "rgba(11, 19, 43, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#78350f" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#0f766e" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#475569" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#b45309" }] },
+    { day: 8, cityName: "LAS VEGAS", skyTheme: { top: "#0f051d", mid: "#2e1065", bottom: "#c026d3", moonColor: "#fde047", moonType: "full", silhouetteColor: "rgba(15, 5, 29, 0.85)" }, buildings: [{ id: "b1", x: 120, width: 220, floors: 6, cols: 3, color: "#7e22ce" }, { id: "b2", x: 400, width: 240, floors: 7, cols: 4, color: "#6b21a8" }, { id: "b3", x: 700, width: 220, floors: 5, cols: 3, color: "#a855f7" }, { id: "b4", x: 980, width: 200, floors: 6, cols: 3, color: "#581c87" }] },
+    { day: 9, cityName: "LONDON", skyTheme: { top: "#111827", mid: "#374151", bottom: "#b45309", moonColor: "#fef3c7", moonType: "crescent", silhouetteColor: "rgba(17, 24, 39, 0.75)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#78350f" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#92400e" }, { id: "b3", x: 680, width: 220, floors: 5, cols: 3, color: "#451a03" }, { id: "b4", x: 960, width: 220, floors: 6, cols: 3, color: "#b45309" }] },
+    { day: 10, cityName: "PARIS", skyTheme: { top: "#1e1b4b", mid: "#4338ca", bottom: "#f472b6", moonColor: "#fce7f3", moonType: "crescent", silhouetteColor: "rgba(30, 27, 75, 0.7)" }, buildings: [{ id: "b1", x: 110, width: 220, floors: 6, cols: 3, color: "#d97706" }, { id: "b2", x: 390, width: 240, floors: 7, cols: 4, color: "#b45309" }, { id: "b3", x: 690, width: 220, floors: 5, cols: 3, color: "#a16207" }, { id: "b4", x: 970, width: 210, floors: 6, cols: 3, color: "#78350f" }] },
+    { day: 11, cityName: "MOSCOW", skyTheme: { top: "#09152b", mid: "#1e3a8a", bottom: "#dc2626", moonColor: "#f8fafc", moonType: "full", silhouetteColor: "rgba(9, 21, 43, 0.85)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#b91c1c" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#991b1b" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#1e3a8a" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#7f1d1d" }, { id: "b2_back", x: 400, width: 200, floors: 7, cols: 3, color: "#450a0a", isBackRow: true, frontBlockerId: "b2" }] },
+    { day: 12, cityName: "RIO DE JANEIRO", skyTheme: { top: "#064e3b", mid: "#047857", bottom: "#f59e0b", moonColor: "#fef08a", moonType: "sun", silhouetteColor: "rgba(6, 78, 59, 0.75)" }, buildings: [{ id: "b1", x: 120, width: 220, floors: 6, cols: 3, color: "#0d9488" }, { id: "b2", x: 400, width: 240, floors: 7, cols: 4, color: "#0f766e" }, { id: "b3", x: 720, width: 220, floors: 6, cols: 3, color: "#115e59" }, { id: "b4", x: 980, width: 200, floors: 5, cols: 3, color: "#047857" }, { id: "b1_back", x: 140, width: 200, floors: 7, cols: 3, color: "#065f46", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 740, width: 200, floors: 7, cols: 3, color: "#064e3b", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 13, cityName: "JOHANNESBURG", skyTheme: { top: "#361605", mid: "#854d0e", bottom: "#eab308", moonColor: "#fef08a", moonType: "sun", silhouetteColor: "rgba(54, 22, 5, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#a16207" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#854d0e" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#b45309" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#78350f" }, { id: "b1_back", x: 120, width: 200, floors: 7, cols: 3, color: "#713f12", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 700, width: 200, floors: 7, cols: 3, color: "#451a03", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 14, cityName: "CAIRO, EGYPT", skyTheme: { top: "#451a03", mid: "#9a3412", bottom: "#eab308", moonColor: "#fef08a", moonType: "sun", silhouetteColor: "rgba(69, 26, 3, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#b45309" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#d97706" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#92400e" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#78350f" }, { id: "b2_back", x: 400, width: 200, floors: 7, cols: 3, color: "#451a03", isBackRow: true, frontBlockerId: "b2" }, { id: "b4_back", x: 980, width: 190, floors: 6, cols: 3, color: "#381402", isBackRow: true, frontBlockerId: "b4" }] },
+    { day: 15, cityName: "KUWAIT CITY", skyTheme: { top: "#0a192f", mid: "#1e3a8a", bottom: "#38bdf8", moonColor: "#bae6fd", moonType: "crescent", silhouetteColor: "rgba(10, 25, 47, 0.85)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#0284c7" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#0369a1" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#075985" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#0c4a6e" }, { id: "b1_back", x: 120, width: 200, floors: 7, cols: 3, color: "#1e3a8a", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 700, width: 200, floors: 7, cols: 3, color: "#172554", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 16, cityName: "MUMBAI", skyTheme: { top: "#3b0764", mid: "#7e22ce", bottom: "#f59e0b", moonColor: "#fef08a", moonType: "full", silhouetteColor: "rgba(59, 7, 100, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#9333ea" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#7e22ce" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#6b21a8" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#581c87" }, { id: "b2_back", x: 400, width: 200, floors: 7, cols: 3, color: "#3b0764", isBackRow: true, frontBlockerId: "b2" }, { id: "b4_back", x: 980, width: 190, floors: 6, cols: 3, color: "#2e1065", isBackRow: true, frontBlockerId: "b4" }] },
+    { day: 17, cityName: "MELBOURNE", skyTheme: { top: "#0f172a", mid: "#1e293b", bottom: "#0284c7", moonColor: "#bae6fd", moonType: "crescent", silhouetteColor: "rgba(15, 23, 42, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#0369a1" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#1e293b" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#475569" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#b45309" }, { id: "b1_back", x: 120, width: 200, floors: 7, cols: 3, color: "#0f172a", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 700, width: 200, floors: 7, cols: 3, color: "#334155", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 18, cityName: "AUCKLAND", skyTheme: { top: "#022c22", mid: "#065f46", bottom: "#0284c7", moonColor: "#38bdf8", moonType: "crescent", silhouetteColor: "rgba(2, 44, 34, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#0f766e" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#115e59" }, { id: "b3", x: 680, width: 220, floors: 5, cols: 3, color: "#134e4a" }, { id: "b4", x: 960, width: 220, floors: 6, cols: 3, color: "#047857" }, { id: "b2_back", x: 400, width: 200, floors: 7, cols: 3, color: "#064e3b", isBackRow: true, frontBlockerId: "b2" }, { id: "b4_back", x: 980, width: 190, floors: 6, cols: 3, color: "#022c22", isBackRow: true, frontBlockerId: "b4" }] },
+    { day: 19, cityName: "TOKYO", skyTheme: { top: "#181825", mid: "#4c1d95", bottom: "#db2777", moonColor: "#f472b6", moonType: "full", silhouetteColor: "rgba(24, 24, 37, 0.85)" }, buildings: [{ id: "b1", x: 90, width: 200, floors: 6, cols: 3, color: "#4338ca" }, { id: "b2", x: 330, width: 220, floors: 7, cols: 3, color: "#3730a3" }, { id: "b3", x: 590, width: 240, floors: 6, cols: 4, color: "#6366f1" }, { id: "b4", x: 870, width: 200, floors: 7, cols: 3, color: "#4f46e5" }, { id: "b1_back", x: 110, width: 180, floors: 7, cols: 3, color: "#312e81", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 610, width: 200, floors: 7, cols: 3, color: "#1e1b4b", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 20, cityName: "SHANGHAI", skyTheme: { top: "#0f172a", mid: "#581c87", bottom: "#06b6d4", moonColor: "#a5f3fc", moonType: "full", silhouetteColor: "rgba(15, 23, 42, 0.85)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#0284c7" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#0369a1" }, { id: "b3", x: 680, width: 220, floors: 6, cols: 3, color: "#075985" }, { id: "b4", x: 960, width: 220, floors: 5, cols: 3, color: "#0c4a6e" }, { id: "b1_back", x: 120, width: 200, floors: 7, cols: 3, color: "#1e3a8a", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 700, width: 200, floors: 7, cols: 3, color: "#172554", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 21, cityName: "SINGAPORE", skyTheme: { top: "#022c22", mid: "#065f46", bottom: "#0284c7", moonColor: "#38bdf8", moonType: "crescent", silhouetteColor: "rgba(2, 44, 34, 0.8)" }, buildings: [{ id: "b1", x: 100, width: 220, floors: 6, cols: 3, color: "#0f766e" }, { id: "b2", x: 380, width: 240, floors: 7, cols: 4, color: "#115e59" }, { id: "b3", x: 680, width: 220, floors: 5, cols: 3, color: "#134e4a" }, { id: "b4", x: 960, width: 220, floors: 6, cols: 3, color: "#047857" }, { id: "b2_back", x: 400, width: 200, floors: 7, cols: 3, color: "#064e3b", isBackRow: true, frontBlockerId: "b2" }, { id: "b4_back", x: 980, width: 190, floors: 6, cols: 3, color: "#022c22", isBackRow: true, frontBlockerId: "b4" }] },
+    { day: 22, cityName: "DUBAI", skyTheme: { top: "#1e1b4b", mid: "#312e81", bottom: "#f59e0b", moonColor: "#fef08a", moonType: "full", silhouetteColor: "rgba(30, 27, 75, 0.85)" }, buildings: [{ id: "b1", x: 90, width: 200, floors: 6, cols: 3, color: "#4f46e5" }, { id: "b2", x: 330, width: 220, floors: 7, cols: 3, color: "#4338ca" }, { id: "b3", x: 590, width: 240, floors: 6, cols: 4, color: "#3730a3" }, { id: "b4", x: 870, width: 200, floors: 5, cols: 3, color: "#312e81" }, { id: "b1_back", x: 110, width: 180, floors: 7, cols: 3, color: "#1e1b4b", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 610, width: 200, floors: 7, cols: 3, color: "#172554", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 23, cityName: "SYDNEY", skyTheme: { top: "#0284c7", mid: "#0369a1", bottom: "#f59e0b", moonColor: "#fef08a", moonType: "full", silhouetteColor: "rgba(2, 132, 199, 0.85)" }, buildings: [{ id: "b1", x: 90, width: 200, floors: 6, cols: 3, color: "#0284c7" }, { id: "b2", x: 330, width: 220, floors: 7, cols: 3, color: "#0369a1" }, { id: "b3", x: 590, width: 240, floors: 6, cols: 4, color: "#075985" }, { id: "b4", x: 870, width: 200, floors: 5, cols: 3, color: "#0c4a6e" }, { id: "b1_back", x: 110, width: 180, floors: 7, cols: 3, color: "#1e3a8a", isBackRow: true, frontBlockerId: "b1" }, { id: "b3_back", x: 610, width: 200, floors: 7, cols: 3, color: "#172554", isBackRow: true, frontBlockerId: "b3" }] },
+    { day: 24, cityName: "HONG KONG, CHINA", skyTheme: { top: "#0f051d", mid: "#4c1d95", bottom: "#06b6d4", moonColor: "#a5f3fc", moonType: "full", silhouetteColor: "rgba(15, 5, 29, 0.9)" }, buildings: [{ id: "b1", x: 80, width: 210, floors: 6, cols: 3, color: "#0284c7" }, { id: "b2", x: 320, width: 230, floors: 7, cols: 3, color: "#7e22ce" }, { id: "b3", x: 580, width: 240, floors: 6, cols: 4, color: "#4338ca" }, { id: "b4", x: 860, width: 210, floors: 5, cols: 3, color: "#0d9488" }, { id: "b1_back", x: 100, width: 180, floors: 7, cols: 3, color: "#0f172a", isBackRow: true, frontBlockerId: "b1" }, { id: "b2_back", x: 340, width: 190, floors: 7, cols: 3, color: "#3b0764", isBackRow: true, frontBlockerId: "b2" }, { id: "b3_back", x: 600, width: 200, floors: 7, cols: 3, color: "#1e1b4b", isBackRow: true, frontBlockerId: "b3" }] }
+  ]
+});
+/* ===== MATH & UTILITIES ===== */
+MetroMonsters.Utils = (() => {
+  return Object.freeze({
+    randomRange: (min, max) => min + Math.random() * (max - min),
+    randomChoice: (arr) => arr[Math.floor(Math.random() * arr.length)],
+    clamp: (val, min, max) => Math.max(min, Math.min(max, val)),
+    rectIntersect: (r1, r2) => !(r2.x > r1.x + r1.w || r2.x + r2.w < r1.x || r2.y > r1.y + r1.h || r2.y + r2.h < r1.y)
+  });
+})();
+
+/* ===== RETRO WEB AUDIO SYNTHESIZER & MUSIC ENGINE ===== */
+MetroMonsters.Audio = (() => {
+  let ctx = null;
+  let rotorOsc = null;
+  let rotorLfo = null;
+  let rotorGain = null;
+  let isRotorActive = false;
+
+  let musicTimer = null;
+  let musicStep = 0;
+  let currentMusicStage = -1;
+
+    const STAGE_MUSIC_TRACKS = [
+    // Stage 0: Chicago (Classic Arcade Driving Blues - C Minor, 118 BPM)
+    { tempo: 118, bass: [65.41, 65.41, 77.78, 87.31, 65.41, 58.27, 65.41, 49.00], lead: [261.63, 311.13, 392.00, 311.13, 349.23, 261.63, 293.66, 246.94] },
+    // Stage 1: New York (Urban Funk/Synthwave Groove - A Minor, 126 BPM)
+    { tempo: 126, bass: [55.00, 55.00, 65.41, 73.42, 55.00, 49.00, 55.00, 41.20], lead: [440.00, 523.25, 659.25, 523.25, 587.33, 440.00, 493.88, 392.00] },
+    // Stage 2: Toronto (Uptempo Canadian Pop Funk - G Minor, 120 BPM)
+    { tempo: 120, bass: [98.00, 98.00, 116.54, 130.81, 98.00, 87.31, 98.00, 73.42], lead: [392.00, 466.16, 587.33, 466.16, 523.25, 392.00, 440.00, 349.23] },
+    // Stage 3: Los Angeles (West Coast Sunbaked Bounce - D Minor, 108 BPM)
+    { tempo: 108, bass: [73.42, 73.42, 87.31, 98.00, 73.42, 65.41, 73.42, 55.00], lead: [293.66, 349.23, 440.00, 349.23, 392.00, 293.66, 329.63, 261.63] },
+    // Stage 4: Monterrey (Latin Brass Ska Pulse - D Minor, 126 BPM)
+    { tempo: 126, bass: [73.42, 98.00, 110.00, 73.42, 65.41, 73.42, 98.00, 55.00], lead: [587.33, 659.25, 739.99, 587.33, 523.25, 587.33, 659.25, 440.00] },
+    // Stage 5: San Francisco (Foggy Bay Chiptune - F Minor, 120 BPM)
+    { tempo: 120, bass: [87.31, 87.31, 103.83, 116.54, 87.31, 77.78, 87.31, 65.41], lead: [349.23, 415.30, 523.25, 415.30, 466.16, 349.23, 392.00, 311.13] },
+    // Stage 6: Seattle (Grunge 90s Bass Drive - G Minor, 114 BPM)
+    { tempo: 114, bass: [98.00, 98.00, 116.54, 130.81, 98.00, 87.31, 98.00, 73.42], lead: [392.00, 466.16, 587.33, 466.16, 523.25, 392.00, 440.00, 349.23] },
+    // Stage 7: Las Vegas (High-Stakes Casino Disco - B Minor, 128 BPM)
+    { tempo: 128, bass: [61.74, 61.74, 73.42, 82.41, 61.74, 55.00, 61.74, 49.00], lead: [493.88, 587.33, 739.99, 587.33, 659.25, 493.88, 523.25, 440.00] },
+    // Stage 8: London (Royal Guard Chiptune March - D Minor, 116 BPM)
+    { tempo: 116, bass: [73.42, 98.00, 73.42, 65.41, 73.42, 87.31, 73.42, 55.00], lead: [293.66, 349.23, 440.00, 587.33, 523.25, 440.00, 349.23, 293.66] },
+    // Stage 9: Paris (French Arcade Chiptune Waltz - C Major, 112 BPM)
+    { tempo: 112, bass: [65.41, 82.41, 98.00, 65.41, 55.00, 65.41, 82.41, 49.00], lead: [261.63, 329.63, 392.00, 523.25, 440.00, 392.00, 329.63, 261.63] },
+    // Stage 10: Moscow (Russian Balalaika Folk Arcade - A Minor, 128 BPM)
+    { tempo: 128, bass: [55.00, 65.41, 82.41, 110.00, 55.00, 73.42, 82.41, 49.00], lead: [440.00, 523.25, 659.25, 880.00, 659.25, 523.25, 440.00, 329.63] },
+    // Stage 11: Rio de Janeiro (Samba Carnival Arcade Bounce - F Major, 130 BPM)
+    { tempo: 130, bass: [87.31, 109.98, 130.81, 87.31, 65.41, 87.31, 109.98, 55.00], lead: [349.23, 440.00, 523.25, 698.46, 587.33, 523.25, 440.00, 349.23] },
+    // Stage 12: Johannesburg (Afrobeat Synth Rhythm - G Minor, 118 BPM)
+    { tempo: 118, bass: [98.00, 98.00, 116.54, 130.81, 98.00, 87.31, 98.00, 73.42], lead: [392.00, 466.16, 587.33, 466.16, 523.25, 392.00, 440.00, 349.23] },
+    // Stage 13: Cairo (Phrygian Desert Mystical Pulse - E Phrygian, 110 BPM)
+    { tempo: 110, bass: [82.41, 87.31, 103.83, 82.41, 73.42, 82.41, 87.31, 61.74], lead: [329.63, 349.23, 415.30, 493.88, 415.30, 349.23, 329.63, 293.66] },
+    // Stage 14: Kuwait City (Arabian Desert Synth Beat - C Phrygian, 115 BPM)
+    { tempo: 115, bass: [65.41, 69.30, 82.41, 65.41, 58.27, 65.41, 69.30, 49.00], lead: [261.63, 277.18, 329.63, 392.00, 329.63, 277.18, 261.63, 233.08] },
+    // Stage 15: Mumbai (Bollywood Bhangra Synth - C Minor, 124 BPM)
+    { tempo: 124, bass: [65.41, 77.78, 87.31, 98.00, 65.41, 77.78, 87.31, 49.00], lead: [523.25, 622.25, 698.46, 783.99, 698.46, 622.25, 523.25, 466.16] },
+    // Stage 16: Melbourne (Aussie Pub Rock Synth - E Minor, 120 BPM)
+    { tempo: 120, bass: [82.41, 82.41, 98.00, 110.00, 82.41, 73.42, 82.41, 61.74], lead: [329.63, 392.00, 493.88, 392.00, 440.00, 329.63, 369.99, 293.66] },
+    // Stage 17: Auckland (Pacific Island Synth Wave - G Minor, 114 BPM)
+    { tempo: 114, bass: [98.00, 98.00, 116.54, 130.81, 98.00, 87.31, 98.00, 73.42], lead: [392.00, 466.16, 587.33, 466.16, 523.25, 392.00, 440.00, 349.23] },
+    // Stage 18: Tokyo (Cyberpunk Neon Fast Synth - E Minor, 136 BPM)
+    { tempo: 136, bass: [82.41, 82.41, 98.00, 110.00, 82.41, 73.42, 82.41, 61.74], lead: [329.63, 392.00, 493.88, 392.00, 440.00, 329.63, 369.99, 293.66] },
+    // Stage 19: Shanghai (Pentatonic Cyber-Oriental Anthem - A Minor, 125 BPM)
+    { tempo: 125, bass: [55.00, 65.41, 73.42, 82.41, 55.00, 73.42, 65.41, 49.00], lead: [440.00, 523.25, 587.33, 659.25, 783.99, 659.25, 587.33, 523.25] },
+    // Stage 20: Singapore (Futuristic Marina Electro - F# Minor, 128 BPM)
+    { tempo: 128, bass: [92.50, 92.50, 110.00, 123.47, 92.50, 82.41, 92.50, 73.42], lead: [369.99, 440.00, 554.37, 440.00, 493.88, 369.99, 415.30, 329.63] },
+    // Stage 21: Dubai (Exotic Gold Pentatonic Pulse - D Phrygian, 122 BPM)
+    { tempo: 122, bass: [73.42, 77.78, 98.00, 73.42, 65.41, 73.42, 77.78, 55.00], lead: [293.66, 311.13, 392.00, 440.00, 523.25, 440.00, 392.00, 311.13] },
+    // Stage 22: Sydney (Harbour Eurobeat Speed Rush - F Minor, 135 BPM)
+    { tempo: 135, bass: [87.31, 87.31, 103.83, 116.54, 87.31, 77.78, 87.31, 65.41], lead: [349.23, 415.30, 523.25, 698.46, 523.25, 415.30, 349.23, 311.13] },
+    // Stage 23: Hong Kong, China (Final Boss Arcade Epic Anthem - C Minor, 140 BPM)
+    { tempo: 140, bass: [65.41, 77.78, 87.31, 98.00, 65.41, 58.27, 65.41, 49.00], lead: [523.25, 622.25, 783.99, 622.25, 698.46, 523.25, 587.33, 493.88] }
+  ];
+
+  function initCtx() {
+    if (!ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) ctx = new AudioCtx();
+    }
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume();
+    }
+  }
+
+  // unlocking web audio context before Chrome yells at me again
+  window.addEventListener("pointerdown", initCtx, { once: false });
+  window.addEventListener("keydown", initCtx, { once: false });
+
+  function playTone(freq, type, duration, vol = 0.15) {
+    if (!MetroMonsters.Constants.AUDIO.SFX_ENABLED) return;
+    initCtx();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(vol * MetroMonsters.Constants.AUDIO.MASTER_VOLUME, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+  }
+
+  function playNoise(duration, vol = 0.15) {
+    if (!MetroMonsters.Constants.AUDIO.SFX_ENABLED) return;
+    initCtx();
+    if (!ctx) return;
+    try {
+      const bufferSize = ctx.sampleRate * duration;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(vol * MetroMonsters.Constants.AUDIO.MASTER_VOLUME, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      noise.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start();
+    } catch (e) {}
+  }
+
+  return Object.freeze({
+    init: initCtx,
+    updateMusic: (stageIndex, isPlaying) => {
+      if (!MetroMonsters.Constants.AUDIO.MUSIC_ENABLED || !isPlaying) {
+        if (musicTimer) {
+          clearInterval(musicTimer);
+          musicTimer = null;
+        }
+        currentMusicStage = -1;
+        return;
+      }
+      initCtx();
+      if (!ctx) return;
+
+      if (currentMusicStage !== stageIndex || !musicTimer) {
+        if (musicTimer) clearInterval(musicTimer);
+        currentMusicStage = stageIndex;
+        musicStep = 0;
+
+        const track = STAGE_MUSIC_TRACKS[stageIndex % STAGE_MUSIC_TRACKS.length];
+        const stepMs = Math.round((60000 / track.tempo) / 2); // 16th note steps
+
+        musicTimer = setInterval(() => {
+          if (!MetroMonsters.Constants.AUDIO.MUSIC_ENABLED) return;
+          initCtx();
+          if (!ctx) return;
+          try {
+            const now = ctx.currentTime;
+            const bFreq = track.bass[musicStep % track.bass.length];
+            const lFreq = track.lead[musicStep % track.lead.length];
+
+            // 8-bit Melodic Bass Channel (+50% Volume Boost)
+            const bOsc = ctx.createOscillator();
+            const bGain = ctx.createGain();
+            bOsc.type = "triangle";
+            bOsc.frequency.setValueAtTime(bFreq, now);
+            bGain.gain.setValueAtTime(0.24 * MetroMonsters.Constants.AUDIO.MASTER_VOLUME, now);
+            bGain.gain.linearRampToValueAtTime(0.001, now + 0.14);
+            bOsc.connect(bGain);
+            bGain.connect(ctx.destination);
+            bOsc.start(now);
+            bOsc.stop(now + 0.15);
+
+            // 8-bit Melody Channel (Pulse/Square Wave - +50% Volume Boost)
+            if (musicStep % 2 === 0) {
+              const lOsc = ctx.createOscillator();
+              const lGain = ctx.createGain();
+              lOsc.type = "square";
+              lOsc.frequency.setValueAtTime(lFreq, now);
+              lGain.gain.setValueAtTime(0.16 * MetroMonsters.Constants.AUDIO.MASTER_VOLUME, now);
+              lGain.gain.linearRampToValueAtTime(0.001, now + 0.20);
+              lOsc.connect(lGain);
+              lGain.connect(ctx.destination);
+              lOsc.start(now);
+              lOsc.stop(now + 0.21);
+            }
+
+            musicStep++;
+          } catch (e) {}
+        }, stepMs);
+      }
+    },
+    updateRotorSound: (helicopters) => {
+      if (!MetroMonsters.Constants.AUDIO.SFX_ENABLED) {
+        if (rotorGain) rotorGain.gain.value = 0;
+        return;
+      }
+      initCtx();
+      if (!ctx) return;
+
+      const hasHelicopter = helicopters && helicopters.some(h => h && h.alive);
+      if (hasHelicopter) {
+        if (!isRotorActive) {
+          try {
+            isRotorActive = true;
+            // 55 Hz sawtooth main rotor tone
+            rotorOsc = ctx.createOscillator();
+            rotorOsc.type = "sawtooth";
+            rotorOsc.frequency.setValueAtTime(55, ctx.currentTime);
+
+            // 13 Hz square wave pulse chopper modulator
+            rotorLfo = ctx.createOscillator();
+            rotorLfo.type = "square";
+            rotorLfo.frequency.setValueAtTime(13, ctx.currentTime);
+
+            // Lowpass filter for deep rhythmic thrum
+            const filter = ctx.createBiquadFilter();
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(360, ctx.currentTime);
+
+            // Dedicated gain node for the chopper modulation signal path
+            const chopGain = ctx.createGain();
+            chopGain.gain.setValueAtTime(0.5, ctx.currentTime);
+
+            rotorGain = ctx.createGain();
+            const targetVol = 0.22 * MetroMonsters.Constants.AUDIO.MASTER_VOLUME;
+            rotorGain.gain.setValueAtTime(0.01, ctx.currentTime);
+            rotorGain.gain.linearRampToValueAtTime(targetVol, ctx.currentTime + 0.2);
+
+            // Bulletproof Signal flow: rotorOsc -> chopGain (modulated by 13Hz rotorLfo) -> filter -> rotorGain -> destination
+            rotorOsc.connect(chopGain);
+            rotorLfo.connect(chopGain.gain);
+            chopGain.connect(filter);
+            filter.connect(rotorGain);
+            rotorGain.connect(ctx.destination);
+
+            rotorOsc.start();
+            rotorLfo.start();
+          } catch (e) {}
+        }
+      } else {
+        if (isRotorActive && rotorGain) {
+          try {
+            rotorGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
+            setTimeout(() => {
+              if (rotorOsc) {
+                try { rotorOsc.stop(); rotorLfo.stop(); } catch(e){}
+              }
+              isRotorActive = false;
+            }, 250);
+          } catch (e) {}
+        }
+      }
+    },
+    playTone,
+    playPunch: () => {
+      playTone(140, 'square', 0.08, 0.3);
+      playNoise(0.06, 0.25);
+    },
+    playJump: () => {
+      if (!MetroMonsters.Constants.AUDIO.ENABLED) return;
+      initCtx();
+      if (!ctx) return;
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(140, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.25 * MetroMonsters.Constants.AUDIO.MASTER_VOLUME, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.18);
+      } catch (e) {}
+    },
+    playSmash: () => {
+      playNoise(0.25, 0.4);
+      playTone(75, 'sawtooth', 0.2, 0.35);
+    },
+    playEat: () => {
+      playTone(320, 'sine', 0.08, 0.3);
+      setTimeout(() => playTone(520, 'sine', 0.1, 0.3), 60);
+    },
+    playShock: () => {
+      playTone(680, 'sawtooth', 0.25, 0.4);
+      playNoise(0.25, 0.35);
+    },
+    playFireball: () => {
+      playTone(560, 'sine', 0.15, 0.3);
+      playNoise(0.14, 0.25);
+    },
+    playShoot: () => {
+      playTone(380, 'sawtooth', 0.06, 0.25);
+    },
+    playExplosion: () => {
+      playNoise(0.5, 0.6);
+      playTone(40, 'sawtooth', 0.45, 0.5);
+    },
+    playBuildingRumble: () => {
+      playNoise(1.2, 0.65);
+      playTone(38, 'sawtooth', 1.2, 0.55);
+    },
+    playRoar: () => {
+      playTone(90, 'sawtooth', 0.5, 0.45);
+      playNoise(0.4, 0.35);
+    }
+  });
+})();
+
+/* ===== INPUT MANAGER ===== */
+MetroMonsters.Input = (() => {
+  const keys = {};
+  const justPressedKeys = {};
+  let pointerClicked = false;
+  let clickPos = null;
+
+  window.addEventListener("keydown", (e) => {
+    if (!keys[e.code]) {
+      justPressedKeys[e.code] = true;
+    }
+    keys[e.code] = true;
+    if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(e.code)) {
+      e.preventDefault();
+    }
+  });
+
+  window.addEventListener("keyup", (e) => {
+    keys[e.code] = false;
+    justPressedKeys[e.code] = false;
+  });
+
+  window.addEventListener("pointerdown", (e) => {
+    if (e.target.tagName !== "BUTTON") {
+      pointerClicked = true;
+      const canvas = document.getElementById("game-canvas");
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = 1280 / rect.width;
+        const scaleY = 720 / rect.height;
+        clickPos = {
+          x: (e.clientX - rect.left) * scaleX,
+          y: (e.clientY - rect.top) * scaleY
+        };
+      }
+    }
+  });
+
+  return Object.freeze({
+    clearPressed: () => {
+      for (let k in justPressedKeys) {
+        justPressedKeys[k] = false;
+      }
+      pointerClicked = false;
+      clickPos = null;
+    },
+    getClickPos: () => clickPos,
+    isConfirmPressed: (playerNum = 1) => {
+      if (pointerClicked) return true;
+      if (justPressedKeys["Enter"] || justPressedKeys["Space"] || justPressedKeys["KeyF"] || justPressedKeys["KeyN"] || justPressedKeys["KeyM"] || justPressedKeys["KeyG"]) return true;
+      
+      const mapping = playerNum === 1 ? MetroMonsters.Constants.CONTROLS.P1_KEYBOARD : MetroMonsters.Constants.CONTROLS.P2_KEYBOARD;
+      if (justPressedKeys[mapping.PUNCH] || justPressedKeys[mapping.JUMP]) return true;
+
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp = gamepads[playerNum - 1];
+      if (gp && gp.connected) {
+        if (gp.buttons[0]?.pressed || gp.buttons[1]?.pressed || gp.buttons[9]?.pressed) return true;
+      }
+      return false;
+    },
+    getPlayerInput: (playerNum) => {
+      const isDown = { up: false, down: false, left: false, right: false, punch: false, jump: false };
+      const wasPressed = { up: false, down: false, left: false, right: false, punch: false, jump: false };
+      
+      const mapping = playerNum === 1 ? MetroMonsters.Constants.CONTROLS.P1_KEYBOARD : MetroMonsters.Constants.CONTROLS.P2_KEYBOARD;
+
+      const isUp = keys[mapping.UP] || (playerNum === 1 && keys["ArrowUp"]);
+      const isDownKey = keys[mapping.DOWN] || (playerNum === 1 && keys["ArrowDown"]);
+      const isLeft = keys[mapping.LEFT] || (playerNum === 1 && keys["ArrowLeft"]);
+      const isRight = keys[mapping.RIGHT] || (playerNum === 1 && keys["ArrowRight"]);
+      const isPunch = keys[mapping.PUNCH] || (playerNum === 1 && keys["KeyF"]);
+      const isJump = keys[mapping.JUMP] || keys["Space"] || (playerNum === 1 && keys["KeyG"]);
+
+      const pUp = justPressedKeys[mapping.UP] || (playerNum === 1 && justPressedKeys["ArrowUp"]);
+      const pDown = justPressedKeys[mapping.DOWN] || (playerNum === 1 && justPressedKeys["ArrowDown"]);
+      const pLeft = justPressedKeys[mapping.LEFT] || (playerNum === 1 && justPressedKeys["ArrowLeft"]);
+      const pRight = justPressedKeys[mapping.RIGHT] || (playerNum === 1 && justPressedKeys["ArrowRight"]);
+      const pPunch = justPressedKeys[mapping.PUNCH] || (playerNum === 1 && justPressedKeys["KeyF"]);
+      const pJump = justPressedKeys[mapping.JUMP] || justPressedKeys["Space"] || (playerNum === 1 && justPressedKeys["KeyG"]);
+
+      if (isUp) isDown.up = true;
+      if (isDownKey) isDown.down = true;
+      if (isLeft) isDown.left = true;
+      if (isRight) isDown.right = true;
+      if (isPunch) isDown.punch = true;
+      if (isJump) isDown.jump = true;
+
+      if (pUp) wasPressed.up = true;
+      if (pDown) wasPressed.down = true;
+      if (pLeft) wasPressed.left = true;
+      if (pRight) wasPressed.right = true;
+      if (pPunch) wasPressed.punch = true;
+      if (pJump) wasPressed.jump = true;
+
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp = gamepads[playerNum - 1];
+      if (gp && gp.connected) {
+        if (gp.axes[1] < -0.4 || gp.buttons[12]?.pressed) { isDown.up = true; wasPressed.up = true; }
+        if (gp.axes[1] > 0.4 || gp.buttons[13]?.pressed) { isDown.down = true; wasPressed.down = true; }
+        if (gp.axes[0] < -0.4 || gp.buttons[14]?.pressed) { isDown.left = true; wasPressed.left = true; }
+        if (gp.axes[0] > 0.4 || gp.buttons[15]?.pressed) { isDown.right = true; wasPressed.right = true; }
+        if (gp.buttons[0]?.pressed) { isDown.punch = true; wasPressed.punch = true; }
+        if (gp.buttons[1]?.pressed) { isDown.jump = true; wasPressed.jump = true; }
+      }
+
+      return { isDown, wasPressed };
+    },
+    wasPausePressed: () => !!(justPressedKeys["KeyP"] || justPressedKeys["Escape"] || justPressedKeys["Pause"])
+  });
+})();
+
+/* ===== SVG VECTOR GRAPHICS LOADER & SPRITE RENDERER ===== */
+MetroMonsters.Sprites = (() => {
+  const images = {};
+
+  function loadSVG(key, path) {
+    const img = new Image();
+    img.src = path;
+    images[key] = img;
+  }
+
+  loadSVG("manny", "images/manny_gorilla.svg");
+  loadSVG("liz", "images/liz_lizard.svg");
+  loadSVG("lyall", "images/lyall_werewolf.svg");
+  loadSVG("building", "images/building_tiles.svg");
+  loadSVG("tank", "images/military_tank.svg");
+  loadSVG("helicopter", "images/military_helicopter.svg");
+  loadSVG("items", "images/items_food.svg");
+  loadSVG("police", "images/police_car.svg");
+  loadSVG("ground_cop", "images/ground_cop.svg");
+  loadSVG("window_soldier", "images/window_soldier.svg");
+  loadSVG("civilian", "images/civilian_human.svg");
+  loadSVG("civilian_lady", "images/civilian_lady.svg");
+  loadSVG("civilian_worker", "images/civilian_worker.svg");
+
+  function getImageByPath(path) {
+    if (!path) return images["civilian"];
+    if (!images[path]) {
+      loadSVG(path, path);
+    }
+    return images[path];
+  }
+
+  return Object.freeze({
+    getImage: (key) => images[key] || getImageByPath(key),
+    getImageByPath: getImageByPath,
+    drawMonster: (ctx, type, x, y, size, facingLeft, isClimbing, isPunching, isFrontFacing) => {
+      ctx.save();
+      ctx.translate(x, y);
+      if (facingLeft) ctx.scale(-1, 1);
+
+      const img = images[type];
+      if (img && img.complete && img.naturalWidth !== 0) {
+        // Render High-Detail Vector SVG Sprite anchored cleanly at feet (y = 0)
+        ctx.drawImage(img, -size * 0.5, -size * 0.98, size, size);
+      }
+
+      if (isPunching) {
+        ctx.fillStyle = "#ff1744";
+        ctx.beginPath();
+        ctx.arc(size * 0.45, -size * 0.4, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffff00";
+        ctx.beginPath();
+        ctx.arc(size * 0.45, -size * 0.4, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  });
+})();
+
+/* ===== PARTICLE & VFX ENGINE ===== */
+MetroMonsters.VFX = (() => {
+  let particles = [];
+
+  return Object.freeze({
+    spawnDust: (x, y, count = 8) => {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          type: "dust",
+          x: x + MetroMonsters.Utils.randomRange(-20, 20),
+          y: y + MetroMonsters.Utils.randomRange(-10, 10),
+          vx: MetroMonsters.Utils.randomRange(-2.5, 2.5),
+          vy: MetroMonsters.Utils.randomRange(-3, -0.5),
+          radius: MetroMonsters.Utils.randomRange(6, 18),
+          alpha: 0.9,
+          decay: MetroMonsters.Utils.randomRange(0.015, 0.03),
+          color: "#d7ccc8"
+        });
+      }
+    },
+    spawnDebris: (x, y, count = 6) => {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          type: "debris",
+          x: x,
+          y: y,
+          vx: MetroMonsters.Utils.randomRange(-4, 4),
+          vy: MetroMonsters.Utils.randomRange(-8, -2),
+          size: MetroMonsters.Utils.randomRange(4, 10),
+          rotation: 0,
+          vRot: MetroMonsters.Utils.randomRange(-0.2, 0.2),
+          color: MetroMonsters.Utils.randomChoice(["#b71c1c", "#795548", "#9e9e9e", "#d32f2f"])
+        });
+      }
+    },
+    spawnExplosion: (x, y) => {
+      MetroMonsters.Audio.playExplosion();
+      for (let i = 0; i < 16; i++) {
+        particles.push({
+          type: "spark",
+          x: x,
+          y: y,
+          vx: MetroMonsters.Utils.randomRange(-6, 6),
+          vy: MetroMonsters.Utils.randomRange(-6, 6),
+          radius: MetroMonsters.Utils.randomRange(3, 8),
+          color: MetroMonsters.Utils.randomChoice(["#ff6d00", "#ffab00", "#ffff00", "#ff1744"]),
+          alpha: 1.0,
+          decay: 0.04
+        });
+      }
+    },
+    spawnTextPopup: (x, y, text, color = "#ffcc00") => {
+      particles.push({
+        type: "text",
+        x: x,
+        y: y,
+        vy: -1.5,
+        text: text,
+        color: color,
+        alpha: 1.0,
+        decay: 0.02
+      });
+    },
+    update: () => {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        if (p.type === "dust") {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.radius += 0.3;
+          p.alpha -= p.decay;
+        } else if (p.type === "debris") {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += MetroMonsters.Constants.PHYSICS.GRAVITY * 0.8;
+          p.rotation += p.vRot;
+          if (p.y > MetroMonsters.Constants.VIEWPORT.ROAD_Y) p.alpha = 0;
+        } else if (p.type === "spark" || p.type === "text") {
+          p.x += (p.vx || 0);
+          p.y += p.vy;
+          p.alpha -= p.decay;
+        }
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+    },
+    render: (ctx) => {
+      ctx.save();
+      particles.forEach((p) => {
+        ctx.globalAlpha = Math.max(0, p.alpha || 1.0);
+        if (p.type === "dust") {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === "debris") {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+          ctx.restore();
+        } else if (p.type === "spark") {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === "text") {
+          ctx.fillStyle = p.color;
+          ctx.font = "bold 18px 'Courier New', monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(p.text, p.x, p.y);
+        }
+      });
+      ctx.restore();
+    }
+  });
+})();
+
+/* ===== CITY DEMOGRAPHICS & POPULATION MATRIX ===== */
+// hopefully I get these demographics right so I don't get cancelled!
+MetroMonsters.Demographics = (() => {
+  const CITY_ROSTERS = [
+    // Day 1: Chicago
+    {
+      primary: ["images/people/person_11_chicago_jazz_saxophonist.svg", "images/people/person_12_chicago_blues_singer.svg", "images/people/person_14_chicago_winter_commuter.svg", "images/people/person_15_chicago_architect.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/civilian_human.svg"],
+      rare: ["images/people/person_13_chicago_deepdish_chef.svg", "images/people/person_49_construction_worker.svg"]
+    },
+    // Day 2: New York
+    {
+      primary: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_02_ny_female_executive.svg", "images/people/person_03_ny_stock_trader.svg", "images/people/person_04_ny_subway_commuter.svg"],
+      common: ["images/people/person_50_police_officer_male.svg", "images/civilian_business_lady.svg"],
+      rare: ["images/people/person_05_ny_broadway_actor.svg", "images/people/person_46_doctor_surgeon.svg"]
+    },
+    // Day 3: Toronto
+    {
+      primary: ["images/people/person_61_toronto_mountie.svg", "images/people/person_62_toronto_hockey_fan.svg", "images/people/person_14_chicago_winter_commuter.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_53_student_backpack.svg"],
+      rare: ["images/people/person_48_firefighter_hero.svg"]
+    },
+    // Day 4: Los Angeles
+    {
+      primary: ["images/people/person_06_la_male_surfer.svg", "images/people/person_07_la_rollerblader.svg", "images/people/person_08_la_hollywood_star.svg", "images/people/person_09_la_skater_teen.svg"],
+      common: ["images/people/person_10_la_fitness_trainer.svg", "images/people/person_53_student_backpack.svg"],
+      rare: ["images/people/person_40_rio_tourist_surfer.svg", "images/civilian_jogger.svg"]
+    },
+    // Day 5: Monterrey
+    {
+      primary: ["images/people/person_63_monterrey_mariachi.svg", "images/people/person_10_la_fitness_trainer.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      common: ["images/people/person_49_construction_worker.svg", "images/civilian_human.svg"],
+      rare: ["images/people/person_64_monterrey_luchador.svg", "images/people/person_46_doctor_surgeon.svg"]
+    },
+    // Day 6: San Francisco
+    {
+      primary: ["images/people/person_16_sf_tech_developer.svg", "images/people/person_17_sf_barista.svg", "images/people/person_18_seattle_raincoat_commuter.svg"],
+      common: ["images/people/person_02_ny_female_executive.svg", "images/people/person_53_student_backpack.svg"],
+      rare: ["images/people/person_55_scientist_lab_coat.svg"]
+    },
+    // Day 7: Seattle
+    {
+      primary: ["images/people/person_18_seattle_raincoat_commuter.svg", "images/people/person_19_seattle_coffee_roaster.svg", "images/people/person_20_seattle_fishmonger.svg"],
+      common: ["images/people/person_16_sf_tech_developer.svg", "images/people/person_14_chicago_winter_commuter.svg"],
+      rare: ["images/people/person_48_firefighter_hero.svg"]
+    },
+    // Day 8: Las Vegas
+    {
+      primary: ["images/people/person_26_vegas_high_roller.svg", "images/people/person_27_vegas_showgirl.svg", "images/people/person_28_vegas_casino_dealer.svg"],
+      common: ["images/people/person_08_la_hollywood_star.svg", "images/civilian_lady.svg"],
+      rare: ["images/people/person_29_vegas_magician.svg", "images/people/person_30_vegas_elvis_impersonator.svg"]
+    },
+    // Day 9: London
+    {
+      primary: ["images/people/person_32_london_dapper_gentleman.svg", "images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_02_ny_female_executive.svg"],
+      common: ["images/people/person_54_elderly_grandfather.svg", "images/people/person_33_london_punk_rocker.svg"],
+      rare: ["images/people/person_31_london_royal_guard.svg"]
+    },
+    // Day 10: Paris
+    {
+      primary: ["images/people/person_35_paris_montmartre_artist.svg", "images/people/person_05_ny_broadway_actor.svg", "images/people/person_32_london_dapper_gentleman.svg"],
+      common: ["images/people/person_54_elderly_grandfather.svg", "images/civilian_lady.svg"],
+      rare: ["images/people/person_34_paris_gourmet_chef.svg"]
+    },
+    // Day 11: Moscow
+    {
+      primary: ["images/people/person_65_moscow_cossack_dancer.svg", "images/people/person_66_moscow_winter_lady.svg", "images/people/person_14_chicago_winter_commuter.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_54_elderly_grandfather.svg"],
+      rare: ["images/people/person_50_police_officer_male.svg"]
+    },
+    // Day 12: Rio de Janeiro
+    {
+      primary: ["images/people/person_36_rio_samba_dancer.svg", "images/people/person_37_rio_beach_soccer_player.svg", "images/people/person_39_rio_carnival_musician.svg"],
+      common: ["images/people/person_40_rio_tourist_surfer.svg", "images/people/person_06_la_male_surfer.svg"],
+      rare: ["images/people/person_38_rio_capoeira_fighter.svg"]
+    },
+    // Day 13: Johannesburg
+    {
+      primary: ["images/people/person_67_joburg_zulu_dancer.svg", "images/people/person_68_joburg_safari_ranger.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      common: ["images/people/person_02_ny_female_executive.svg", "images/people/person_53_student_backpack.svg"],
+      rare: ["images/people/person_46_doctor_surgeon.svg"]
+    },
+    // Day 14: Cairo, Egypt
+    {
+      primary: ["images/people/person_41_cairo_traditional_elder.svg", "images/people/person_42_cairo_modern_professional.svg", "images/people/person_43_cairo_bazaar_merchant.svg", "images/people/person_56_cairo_bazaar_woman.svg"],
+      common: ["images/people/person_69_kuwait_business_exec.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      rare: ["images/people/person_44_cairo_archaeologist.svg"]
+    },
+    // Day 15: Kuwait City
+    {
+      primary: ["images/people/person_69_kuwait_business_exec.svg", "images/people/person_45_dubai_traditional_emirati.svg", "images/people/person_34_dubai_luxury_entrepreneur.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_59_dubai_aviator_pilot.svg"],
+      rare: ["images/people/person_26_vegas_high_roller.svg"]
+    },
+    // Day 16: Mumbai
+    {
+      primary: ["images/people/person_70_mumbai_bollywood_dancer.svg", "images/people/person_71_mumbai_dabbawala.svg", "images/people/person_35_hk_financial_analyst.svg"],
+      common: ["images/people/person_42_cairo_modern_professional.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      rare: ["images/people/person_47_nurse_practitioner.svg"]
+    },
+    // Day 17: Melbourne
+    {
+      primary: ["images/people/person_72_melbourne_aussie_rules.svg", "images/people/person_73_melbourne_hipster.svg", "images/people/person_76_sydney_bondi_lifeguard.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_53_student_backpack.svg"],
+      rare: ["images/people/person_48_firefighter_hero.svg"]
+    },
+    // Day 18: Auckland
+    {
+      primary: ["images/people/person_74_auckland_maori_warrior.svg", "images/people/person_75_auckland_kiwi_hiker.svg", "images/people/person_72_melbourne_aussie_rules.svg"],
+      common: ["images/people/person_18_seattle_raincoat_commuter.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      rare: ["images/people/person_74_auckland_maori_warrior.svg"]
+    },
+    // Day 19: Tokyo
+    {
+      primary: ["images/people/person_21_tokyo_salaryman.svg", "images/people/person_22_tokyo_kimono_lady.svg", "images/people/person_23_tokyo_harajuku_youth.svg", "images/people/person_57_tokyo_streetwear_male.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_25_tokyo_anime_cosplayer.svg"],
+      rare: ["images/people/person_24_tokyo_sushi_chef.svg"]
+    },
+    // Day 20: Shanghai
+    {
+      primary: ["images/people/person_29_shanghai_qipao_lady.svg", "images/people/person_30_shanghai_tech_executive.svg", "images/people/person_21_tokyo_salaryman.svg"],
+      common: ["images/people/person_02_ny_female_executive.svg", "images/people/person_55_scientist_lab_coat.svg"],
+      rare: ["images/people/person_58_shanghai_tea_master.svg"]
+    },
+    // Day 21: Singapore
+    {
+      primary: ["images/people/person_31_singapore_airline_stewardess.svg", "images/people/person_32_singapore_hawker_chef.svg", "images/people/person_35_hk_financial_analyst.svg"],
+      common: ["images/people/person_42_cairo_modern_professional.svg", "images/people/person_01_ny_wallstreet_broker.svg"],
+      rare: ["images/people/person_47_nurse_practitioner.svg"]
+    },
+    // Day 22: Dubai
+    {
+      primary: ["images/people/person_45_dubai_traditional_emirati.svg", "images/people/person_34_dubai_luxury_entrepreneur.svg", "images/people/person_69_kuwait_business_exec.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_59_dubai_aviator_pilot.svg"],
+      rare: ["images/people/person_26_vegas_high_roller.svg"]
+    },
+    // Day 23: Sydney
+    {
+      primary: ["images/people/person_76_sydney_bondi_lifeguard.svg", "images/people/person_06_la_male_surfer.svg", "images/people/person_72_melbourne_aussie_rules.svg"],
+      common: ["images/people/person_01_ny_wallstreet_broker.svg", "images/people/person_02_ny_female_executive.svg"],
+      rare: ["images/people/person_53_student_backpack.svg"]
+    },
+    // Day 24: Hong Kong
+    {
+      primary: ["images/people/person_35_hk_financial_analyst.svg", "images/people/person_60_hk_tram_conductor.svg", "images/people/person_21_tokyo_salaryman.svg"],
+      common: ["images/people/person_02_ny_female_executive.svg", "images/people/person_50_police_officer_male.svg"],
+      rare: ["images/people/person_36_hk_martial_arts_master.svg"]
+    }
+  ];
+
+  return Object.freeze({
+    getCityPedestrianSprite: (stageIndex) => {
+      const city = CITY_ROSTERS[stageIndex % CITY_ROSTERS.length];
+      const rand = Math.random();
+      let pool = city.primary;
+      if (rand > 0.90 && city.rare && city.rare.length > 0) {
+        pool = city.rare;
+      } else if (rand > 0.60 && city.common && city.common.length > 0) {
+        pool = city.common;
+      }
+      return MetroMonsters.Utils.randomChoice(pool);
+    }
+  });
+})();
+
+
+/* ===== DESTRUCTIBLE BUILDING ENGINE & INTERACTIVE WINDOW OBJECTS ===== */
+MetroMonsters.BuildingManager = (() => {
+  let buildings = [];
+
+  class Building {
+    constructor(id, x, width, floors, columns, color, isBackRow = false, frontBlockerId = null, stageIndex = 0) {
+      this.stageIndex = stageIndex;
+      this.id = id;
+      this.x = x;
+      this.width = width;
+      this.floors = floors;
+      this.columns = columns;
+      this.color = color;
+      this.isBackRow = isBackRow;
+      this.frontBlockerId = frontBlockerId;
+      this.tileW = width / columns;
+      this.tileH = MetroMonsters.Constants.BUILDINGS.FLOOR_HEIGHT;
+      this.height = floors * this.tileH;
+      this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y - this.height;
+
+      this.isCollapsing = false;
+      this.isDestroyed = false;
+
+      this.grid = [];
+      const itemChoices = ["FOOD", "SHOWER", "FIRE_PEPPER", "ELECTRIC_WIRE", "DYNAMITE"];
+      for (let r = 0; r < floors; r++) {
+        const row = [];
+        for (let c = 0; c < columns; c++) {
+          const roll = Math.random();
+          let hasCiv = false;
+          let item = null;
+          if (roll < 0.40) {
+            hasCiv = true;
+          } else if (roll < 0.75) {
+            item = MetroMonsters.Utils.randomChoice(itemChoices);
+          }
+
+          row.push({
+            state: 0,
+            hasCivilian: hasCiv,
+            civSpritePath: MetroMonsters.Demographics.getCityPedestrianSprite(this.stageIndex),
+            itemType: item,
+            soldierPhase: "INACTIVE",
+            soldierTimer: 0,
+            soldierType: null,
+            soldierCooldown: Math.floor(MetroMonsters.Utils.randomRange(1500, 2700)), // 25-45s initial delay
+            slideProgress: 0.0
+          });
+        }
+        this.grid.push(row);
+      }
+      this.totalTiles = floors * columns;
+      this.intactTiles = this.totalTiles;
+    }
+
+    // check if front building is standing (because the ones in the back need to wait their turn)
+    isInactive() {
+      if (this.isBackRow && this.frontBlockerId) {
+        const frontBuilding = buildings.find(b => b.id === this.frontBlockerId);
+        if (frontBuilding && !frontBuilding.isDestroyed) {
+          return true; // Blocked by front building!
+        }
+      }
+      return false;
+    }
+
+    isEdgeOccluded(side) {
+      if (this.isInactive()) return true;
+      const edgeX = (side === "left") ? this.x : (this.x + this.width);
+      for (const frontB of buildings) {
+        if (frontB.id !== this.id && !frontB.isBackRow && !frontB.isDestroyed && !frontB.isCollapsing) {
+          if (edgeX >= frontB.x && edgeX <= frontB.x + frontB.width) {
+            return true; // Edge is hidden behind a standing front building!
+          }
+        }
+      }
+      return false;
+    }
+
+    damageTile(col, floor) {
+      if (this.isCollapsing || this.isDestroyed || this.isInactive()) return;
+      if (floor < 0 || floor >= this.floors || col < 0 || col >= this.columns) return;
+
+      const tile = this.grid[floor][col];
+      if (tile && tile.state < 2) {
+        tile.state++;
+        tile.soldierPhase = "INACTIVE"; // Destroying window clears soldier
+        tile.slideProgress = 0.0;
+        MetroMonsters.Audio.playSmash();
+
+        const hitX = this.x + col * this.tileW + this.tileW / 2;
+        const hitY = this.y + floor * this.tileH + this.tileH / 2;
+        MetroMonsters.VFX.spawnDebris(hitX, hitY, 6);
+
+        if (tile.state === 2) {
+          this.intactTiles--;
+          if (this.intactTiles / this.totalTiles < MetroMonsters.Constants.BUILDINGS.COLLAPSE_THRESHOLD) {
+            this.triggerCollapse();
+          }
+        }
+      }
+    }
+
+    triggerCollapse() {
+      if (this.isCollapsing || this.isDestroyed) return;
+      this.isCollapsing = true;
+      MetroMonsters.Audio.playBuildingRumble();
+      MetroMonsters.VFX.spawnDust(this.x + this.width / 2, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 20, 24);
+    }
+
+    update() {
+      if (this.isCollapsing) {
+        this.y += 3.0;
+        MetroMonsters.VFX.spawnDust(this.x + MetroMonsters.Utils.randomRange(0, this.width), MetroMonsters.Constants.VIEWPORT.ROAD_Y - 10, 2);
+
+        if (this.y >= MetroMonsters.Constants.VIEWPORT.ROAD_Y - 24) {
+          this.isCollapsing = false;
+          this.isDestroyed = true;
+          this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y - 24;
+          this.height = 24;
+        }
+      } else if (!this.isDestroyed) {
+        // Slow Window Soldier State Machine (Slow Slide-In, Aiming Pause, Attack, Waiting, Slow Slide-Out)
+        for (let r = 0; r < this.floors; r++) {
+          for (let c = 0; c < this.columns; c++) {
+            const tile = this.grid[r][c];
+            if (tile && tile.state === 0) {
+              if (tile.soldierPhase === "SLIDING_IN") {
+                tile.slideProgress = Math.min(1.0, tile.slideProgress + 0.015); // ~1.1s slow slide-in
+                if (tile.slideProgress >= 1.0) {
+                  tile.soldierPhase = "AIMING";
+                  tile.soldierTimer = 150; // 2.5s aiming pause for player reaction time!
+                }
+              } else if (tile.soldierPhase === "AIMING") {
+                tile.soldierTimer--;
+                if (tile.soldierTimer <= 0) {
+                  tile.soldierPhase = "ATTACKING";
+                  tile.soldierTimer = 40;
+                }
+              } else if (tile.soldierPhase === "ATTACKING") {
+                tile.soldierTimer--;
+                if (tile.soldierTimer === 20) {
+                  const wx = this.x + c * this.tileW + (this.tileW - MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH) / 2;
+                  const wy = this.y + r * this.tileH + (this.tileH - MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT) / 2;
+                  if (tile.soldierType === "DYNAMITE") {
+                    MetroMonsters.AIDirector.spawnDynamite(wx + 20, wy + 16, Math.random() > 0.5 ? 2.5 : -2.5, -4.5);
+                  } else {
+                    MetroMonsters.AIDirector.spawnSniperBullet(wx + 20, wy + 16);
+                  }
+                }
+                if (tile.soldierTimer <= 0) {
+                  tile.soldierPhase = "WAITING";
+                  tile.soldierTimer = 90; // 1.5s post-attack window wait so player can eat them!
+                }
+              } else if (tile.soldierPhase === "WAITING") {
+                tile.soldierTimer--;
+                if (tile.soldierTimer <= 0) {
+                  tile.soldierPhase = "SLIDING_OUT";
+                }
+              } else if (tile.soldierPhase === "SLIDING_OUT") {
+                tile.slideProgress = Math.max(0.0, tile.slideProgress - 0.015); // ~1.1s slow slide-out
+                if (tile.slideProgress <= 0.0) {
+                  tile.soldierPhase = "INACTIVE";
+                  tile.soldierCooldown = Math.floor(MetroMonsters.Utils.randomRange(1800, 3000));
+                }
+              } else if (tile.soldierPhase === "INACTIVE") {
+                tile.soldierCooldown--;
+                if (tile.soldierCooldown <= 0) {
+                  tile.soldierCooldown = Math.floor(MetroMonsters.Utils.randomRange(1800, 3000)); // 30-50s spacing
+                  if (Math.random() < 0.15) { // Low occasional spawn chance
+                    tile.soldierPhase = "SLIDING_IN";
+                    tile.slideProgress = 0.0;
+                    tile.soldierType = Math.random() < 0.6 ? "SHOOT" : "DYNAMITE";
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    render(ctx) {
+      if (this.isDestroyed) {
+        ctx.fillStyle = "#3e2723";
+        ctx.fillRect(this.x, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 20, this.width, 20);
+        return;
+      }
+
+      ctx.save();
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(this.x - 4, this.y - 10, this.width + 8, 14);
+
+      for (let r = 0; r < this.floors; r++) {
+        for (let c = 0; c < this.columns; c++) {
+          const wx = this.x + c * this.tileW + (this.tileW - MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH) / 2;
+          const wy = this.y + r * this.tileH + (this.tileH - MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT) / 2;
+          const tile = this.grid[r][c];
+
+          if (tile.state === 0) {
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(wx, wy, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH, MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT);
+            ctx.fillStyle = "#38bdf8";
+            ctx.fillRect(wx + 4, wy + 4, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH - 8, MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT - 8);
+
+            if (tile.slideProgress > 0.0) {
+              // High-Detail Vector Window Soldier sliding into open window with strict inner clipping!
+              ctx.save();
+              // Clip strictly inside inner window box so soldier NEVER leaks onto building wall!
+              ctx.beginPath();
+              ctx.rect(wx + 4, wy + 4, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH - 8, MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT - 8);
+              ctx.clip();
+
+              // Window Shade rolling open
+              ctx.fillStyle = "#0f172a";
+              ctx.fillRect(wx + 4, wy + 4, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH - 8, Math.floor(14 * tile.slideProgress));
+
+              // High-Detail Vector SVG Military Soldier
+              const soldierImg = MetroMonsters.Sprites.getImage("window_soldier");
+              if (soldierImg && soldierImg.complete && soldierImg.naturalWidth !== 0) {
+                const drawY = wy + 38 - Math.floor(32 * tile.slideProgress);
+                ctx.drawImage(soldierImg, wx + 4, drawY, 32, 32);
+
+                if (tile.soldierType === "DYNAMITE" && tile.slideProgress > 0.6) {
+                  // Lit Dynamite spark fuse
+                  ctx.fillStyle = "#dc2626"; ctx.fillRect(wx + 26, drawY + 12, 8, 4);
+                  ctx.fillStyle = "#f59e0b"; ctx.fillRect(wx + 34, drawY + 10, 3, 3);
+                }
+              }
+              ctx.restore();
+            }
+          } else if (tile.state === 1) {
+            // Authentic Spiderweb Cracked Window with Impact Hole & Strict Inner Glass Clipping!
+            ctx.save();
+            const ww = MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH;
+            const wh = MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT;
+
+            // Outer Frame
+            ctx.fillStyle = "#1e293b";
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = "#475569"; ctx.lineWidth = 2;
+            ctx.strokeRect(wx, wy, ww, wh);
+
+            // STRICT INNER GLASS CLIPPING: Guarantees cracks NEVER spill onto building wall facade!
+            ctx.beginPath();
+            ctx.rect(wx + 3, wy + 3, ww - 6, wh - 6);
+            ctx.clip();
+
+            // Blue Glass Interior Base
+            ctx.fillStyle = "#0284c7";
+            ctx.fillRect(wx + 3, wy + 3, ww - 6, wh - 6);
+
+            // Determine variation (0, 1, or 2) deterministically per tile position!
+            const varIdx = (r * 7 + c * 3 + (this.id ? this.id.charCodeAt(0) : 0)) % 3;
+
+            let hx = wx + ww / 2;
+            let hy = wy + wh / 2;
+            if (varIdx === 1) { hx = wx + 15; hy = wy + 26; }
+            else if (varIdx === 2) { hx = wx + 25; hy = wy + 20; }
+
+            // Dark Center Impact Hole
+            ctx.fillStyle = "#090d16";
+            ctx.beginPath();
+            ctx.arc(hx, hy, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 1.5; ctx.stroke();
+
+            // Radial Spiderweb Crack Lines (White / Sky Blue)
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+
+            // Spoke 1: Top-Left
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + 4, wy + 4);
+            // Spoke 2: Top
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + ww / 2, wy + 3);
+            // Spoke 3: Top-Right
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + ww - 4, wy + 4);
+            // Spoke 4: Right
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + ww - 3, wy + wh / 2);
+            // Spoke 5: Bottom-Right
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + ww - 4, wy + wh - 4);
+            // Spoke 6: Bottom
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + ww / 2, wy + wh - 3);
+            // Spoke 7: Bottom-Left
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + 4, wy + wh - 4);
+            // Spoke 8: Left
+            ctx.moveTo(hx, hy); ctx.lineTo(wx + 3, wy + wh / 2);
+            ctx.stroke();
+
+            // Concentric Spiderweb Rings connecting the spokes!
+            ctx.strokeStyle = "rgba(224, 242, 254, 0.85)";
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+
+            // Inner Spiderweb Ring
+            ctx.arc(hx, hy, 10, 0, Math.PI * 2);
+            // Outer Spiderweb Ring
+            ctx.moveTo(hx + 16, hy);
+            ctx.arc(hx, hy, 16, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+          } else if (tile.state === 2) {
+            // High-Contrast Fully Smashed Window Hole (Pitch Black Interior with Distinct Brick Frame)
+            ctx.fillStyle = "#050811";
+            ctx.fillRect(wx - 2, wy - 2, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH + 4, MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT + 4);
+            ctx.strokeStyle = "#78350f"; ctx.lineWidth = 2;
+            ctx.strokeRect(wx - 2, wy - 2, MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH + 4, MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT + 4);
+            
+            if (tile.hasCivilian) {
+              const civImg = MetroMonsters.Sprites.getImageByPath(tile.civSpritePath);
+              if (civImg && civImg.complete && civImg.naturalWidth !== 0) {
+                ctx.save();
+                ctx.drawImage(civImg, wx + 8, wy + 8, 24, 32);
+                ctx.restore();
+              }
+            } else if (tile.itemType) {
+              // High-Detail Vector Art for Window Items
+              ctx.save();
+              if (tile.itemType === "FOOD") {
+                // Layered Double Cheeseburger
+                ctx.fillStyle = "#d97706";
+                ctx.beginPath(); ctx.arc(wx + 20, wy + 16, 12, Math.PI, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = "#16a34a"; ctx.fillRect(wx + 8, wy + 17, 24, 3);
+                ctx.fillStyle = "#b91c1c"; ctx.fillRect(wx + 10, wy + 20, 20, 3);
+                ctx.fillStyle = "#451a03"; ctx.fillRect(wx + 8, wy + 23, 24, 5);
+                ctx.fillStyle = "#f59e0b"; ctx.fillRect(wx + 10, wy + 28, 20, 4);
+              } else if (tile.itemType === "SHOWER") {
+                // Porcelain Clawfoot Tub & Chrome Showerhead
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath(); ctx.arc(wx + 20, wy + 28, 14, 0, Math.PI); ctx.fill();
+                ctx.fillRect(wx + 6, wy + 22, 28, 6);
+                ctx.fillStyle = "#94a3b8";
+                ctx.fillRect(wx + 10, wy + 35, 4, 5); ctx.fillRect(wx + 26, wy + 35, 4, 5);
+                ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(wx + 10, wy + 22); ctx.lineTo(wx + 10, wy + 8); ctx.lineTo(wx + 22, wy + 8); ctx.stroke();
+                ctx.fillStyle = "#94a3b8"; ctx.fillRect(wx + 18, wy + 8, 8, 4);
+                ctx.fillStyle = "#38bdf8";
+                ctx.fillRect(wx + 20, wy + 14, 2, 4); ctx.fillRect(wx + 24, wy + 16, 2, 4);
+              } else if (tile.itemType === "FIRE_PEPPER") {
+                // Fiery Jalapeno & Flame Aura
+                ctx.fillStyle = "rgba(255, 109, 0, 0.4)";
+                ctx.beginPath(); ctx.arc(wx + 20, wy + 24, 14, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = "#dc2626";
+                ctx.beginPath(); ctx.ellipse(wx + 20, wy + 24, 7, 14, 0.2, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = "#16a34a";
+                ctx.beginPath(); ctx.arc(wx + 18, wy + 10, 3, 0, Math.PI * 2); ctx.fill();
+              } else if (tile.itemType === "ELECTRIC_WIRE") {
+                // Wall Outlet Junction Box & Severed Sparking Cables
+                ctx.fillStyle = "#1e293b"; ctx.fillRect(wx + 10, wy + 12, 20, 24);
+                ctx.fillStyle = "#475569"; ctx.fillRect(wx + 12, wy + 14, 16, 20);
+                ctx.strokeStyle = "#b45309"; ctx.lineWidth = 3.5;
+                ctx.beginPath(); ctx.moveTo(wx + 16, wy + 24); ctx.lineTo(wx + 6, wy + 14); ctx.stroke();
+                ctx.strokeStyle = "#dc2626";
+                ctx.beginPath(); ctx.moveTo(wx + 24, wy + 24); ctx.lineTo(wx + 34, wy + 12); ctx.stroke();
+                ctx.strokeStyle = (Math.floor(Date.now() / 100) % 2 === 0) ? "#ffff00" : "#38bdf8";
+                ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(wx + 4, wy + 10); ctx.lineTo(wx + 10, wy + 16); ctx.lineTo(wx + 6, wy + 22); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(wx + 36, wy + 8); ctx.lineTo(wx + 30, wy + 14); ctx.lineTo(wx + 34, wy + 20); ctx.stroke();
+              } else if (tile.itemType === "DYNAMITE") {
+                // 3-Stick Dynamite Bundle labeled TNT with Burning Fuse
+                ctx.fillStyle = "#b91c1c";
+                ctx.fillRect(wx + 8, wy + 16, 7, 22);
+                ctx.fillRect(wx + 17, wy + 14, 7, 24);
+                ctx.fillRect(wx + 26, wy + 16, 7, 22);
+                ctx.fillStyle = "#0f172a";
+                ctx.fillRect(wx + 6, wy + 22, 28, 4);
+                ctx.fillRect(wx + 6, wy + 30, 28, 4);
+                ctx.fillStyle = "#facc15"; ctx.font = "900 8px monospace"; ctx.textAlign = "center";
+                ctx.fillText("TNT", wx + 20, wy + 26);
+                ctx.strokeStyle = "#78350f"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(wx + 20, wy + 14); ctx.lineTo(wx + 20, wy + 6); ctx.stroke();
+                ctx.fillStyle = (Math.floor(Date.now() / 80) % 2 === 0) ? "#ff6d00" : "#ffff00";
+                ctx.beginPath(); ctx.arc(wx + 20, wy + 6, 3.5, 0, Math.PI * 2); ctx.fill();
+              }
+              ctx.restore();
+            }
+          }
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  return Object.freeze({
+    loadStage: (stageIndex) => {
+      const stage = MetroMonsters.Constants.STAGES[stageIndex % MetroMonsters.Constants.STAGES.length];
+      buildings = stage.buildings.map(b => new Building(b.id, b.x, b.width, b.floors, b.cols, b.color, b.isBackRow, b.frontBlockerId, stageIndex));
+    },
+    getBuildings: () => buildings,
+    areAllBuildingsDestroyed: () => buildings.length > 0 && buildings.every(b => b.isDestroyed),
+    update: () => { buildings.forEach(b => b.update()); },
+    render: (ctx) => {
+      ctx.save();
+      // Clip rendering to sky zone above street level so collapsing buildings sink into ground behind the road
+      ctx.beginPath();
+      ctx.rect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 10);
+      ctx.clip();
+      // Render back-row buildings first, then front-row buildings on top!
+      buildings.filter(b => b.isBackRow).forEach(b => b.render(ctx));
+      buildings.filter(b => !b.isBackRow).forEach(b => b.render(ctx));
+      ctx.restore();
+    }
+  });
+})();
+
+/* ===== ENTITY ENGINE (Monsters & Fire-Breathing Ability) ===== */
+MetroMonsters.Entities = (() => {
+  class Monster {
+    constructor(playerNum, config, isCPU = false) {
+      this.playerNum = playerNum;
+      this.config = config;
+      this.id = config.id;
+      this.name = config.name;
+      this.color = config.color;
+      this.isCPU = isCPU;
+
+      this.x = playerNum === 1 ? 280 : 720;
+      this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+      this.vx = 0;
+      this.vy = 0;
+      this.size = 72;
+
+      this.hp = 100;
+      this.score = 0;
+      this.isAlive = true;
+      this.isClimbing = false;
+      this.attachedBuilding = null;
+      this.climbSide = null;
+      this.facingLeft = playerNum === 2;
+      this.isFrontFacing = false;
+
+      this.isPunching = false;
+      this.punchTimer = 0;
+      this.fireBreathTimer = 0;
+      this.electroShockTimer = 0;
+    }
+
+    update() {
+      if (!this.isAlive) return;
+
+      if (this.fireBreathTimer > 0) this.fireBreathTimer--;
+      if (this.electroShockTimer > 0) this.electroShockTimer--;
+
+      let isDown = { up: false, down: false, left: false, right: false, punch: false, jump: false };
+      let wasPressed = { up: false, down: false, left: false, right: false, punch: false, jump: false };
+
+      if (this.isCPU) {
+        if (Math.random() < 0.04) wasPressed.punch = true;
+        if (Math.random() < 0.02) wasPressed.jump = true;
+        if (this.isClimbing) {
+          isDown.up = Math.random() > 0.3;
+          isDown.down = Math.random() > 0.8;
+        } else {
+          isDown.left = this.x > 600;
+          isDown.right = this.x <= 600;
+        }
+      } else {
+        const input = MetroMonsters.Input.getPlayerInput(this.playerNum);
+        isDown = input.isDown;
+        wasPressed = input.wasPressed;
+      }
+
+      if (wasPressed.punch && !this.isPunching) {
+        this.isPunching = true;
+        this.punchTimer = 12;
+        MetroMonsters.Audio.playPunch();
+
+        // Fire Breathing Powerup!
+        if (this.fireBreathTimer > 0) {
+          MetroMonsters.Audio.playFireball();
+          MetroMonsters.AIDirector.spawnFireball(
+            this.x + (this.facingLeft ? -40 : 40),
+            this.y - 45,
+            this.facingLeft ? -8 : 8
+          );
+        }
+
+        this.performPunch();
+      }
+
+      if (this.punchTimer > 0) {
+        this.punchTimer--;
+        if (this.punchTimer === 0) this.isPunching = false;
+      }
+
+      const buildings = MetroMonsters.BuildingManager.getBuildings();
+
+      if (this.isClimbing && this.attachedBuilding) {
+        const b = this.attachedBuilding;
+        this.vy = 0;
+
+        if (isDown.up) this.y -= MetroMonsters.Constants.PHYSICS.CLIMB_SPEED_Y * this.config.climbSpeedMult;
+        if (isDown.down) this.y += MetroMonsters.Constants.PHYSICS.CLIMB_SPEED_Y * this.config.climbSpeedMult;
+
+        if (this.climbSide === "left") {
+          this.x = b.x;
+          this.facingLeft = false;
+        } else {
+          this.x = b.x + b.width;
+          this.facingLeft = true;
+        }
+
+        // Top Roof Boundary Check: Stop climbing at building roof cap ledge (b.y - 10) and transition to standing on roof!
+        if (this.y <= b.y - 10) {
+          this.y = b.y - 10;
+          this.isClimbing = false;
+          this.attachedBuilding = null;
+        }
+
+        if (this.y >= MetroMonsters.Constants.VIEWPORT.ROAD_Y) {
+          this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+          this.isClimbing = false;
+          this.attachedBuilding = null;
+        }
+
+        if (wasPressed.jump) {
+          this.isClimbing = false;
+          this.attachedBuilding = null;
+          this.vy = MetroMonsters.Constants.PHYSICS.JUMP_FORCE;
+          this.vx = (this.climbSide === "left") ? -2.5 : 2.5;
+          MetroMonsters.Audio.playJump();
+        }
+
+        if (b.isCollapsing) {
+          this.isClimbing = false;
+          this.attachedBuilding = null;
+          this.hp -= MetroMonsters.Constants.PHYSICS.COLLAPSE_DAMAGE;
+          MetroMonsters.VFX.spawnTextPopup(this.x, this.y, "-12 HP", "#ff1744");
+        }
+      } else {
+        this.isFrontFacing = isDown.down;
+
+        if (isDown.left) {
+          this.vx = -MetroMonsters.Constants.PHYSICS.WALK_SPEED;
+          this.facingLeft = true;
+        } else if (isDown.right) {
+          this.vx = MetroMonsters.Constants.PHYSICS.WALK_SPEED;
+          this.facingLeft = false;
+        } else {
+          this.vx *= MetroMonsters.Constants.PHYSICS.GROUND_FRICTION;
+        }
+
+        // Determine surface Y under monster (Street ground ROAD_Y or Building Roof Cap b.y - 10)
+        let targetSurfaceY = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+        buildings.forEach(b => {
+          if (!b.isDestroyed && !b.isCollapsing) {
+            if (this.x >= b.x - 12 && this.x <= b.x + b.width + 12) {
+              const roofElevation = b.y - 10;
+              if (this.y <= roofElevation + 18 && roofElevation < targetSurfaceY) {
+                targetSurfaceY = roofElevation;
+              }
+            }
+          }
+        });
+
+        if (wasPressed.jump && this.y >= targetSurfaceY - 4) {
+          this.vy = MetroMonsters.Constants.PHYSICS.JUMP_FORCE;
+          MetroMonsters.Audio.playJump();
+        }
+
+        this.vy += MetroMonsters.Constants.PHYSICS.GRAVITY;
+        this.vy = Math.min(this.vy, MetroMonsters.Constants.PHYSICS.MAX_FALL_SPEED);
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Clamp Y so monster never flies off top of screen!
+        if (this.y < 60) {
+          this.y = 60;
+          this.vy = Math.max(0, this.vy);
+        }
+
+        // Check Landing on Vehicles / Helicopters to CRUSH them!
+        const monsterBox = { x: this.x - 28, y: this.y - 56, w: 56, h: 56 };
+        MetroMonsters.AIDirector.checkVehicleCrush(monsterBox, this);
+
+        if (this.y >= targetSurfaceY) {
+          this.y = targetSurfaceY;
+          this.vy = 0;
+        }
+
+        if (isDown.up || isDown.down) {
+          buildings.forEach((b) => {
+            if (!b.isDestroyed && !b.isCollapsing) {
+              const nearLeftEdge = Math.abs(this.x - b.x) < 32;
+              const nearRightEdge = Math.abs(this.x - (b.x + b.width)) < 32;
+              if ((nearLeftEdge || nearRightEdge) && this.y <= MetroMonsters.Constants.VIEWPORT.ROAD_Y && this.y >= b.y) {
+                this.isClimbing = true;
+                this.attachedBuilding = b;
+                this.climbSide = nearLeftEdge ? "left" : "right";
+                this.vy = 0;
+              }
+            }
+          });
+        }
+      }
+
+      this.x = MetroMonsters.Utils.clamp(this.x, 40, MetroMonsters.Constants.VIEWPORT.WIDTH - 40);
+    }
+
+    performPunch() {
+      const punchX = this.facingLeft ? (this.x - 54) : (this.x + 14);
+      const punchY = this.y - 45;
+      const punchBox = { x: punchX, y: punchY, w: 40, h: 40 };
+
+      // Damage Building Windows / Handle Interactive Objects
+      const buildings = MetroMonsters.BuildingManager.getBuildings();
+      buildings.forEach(b => {
+        if (!b.isDestroyed && !b.isCollapsing) {
+          if (punchX + 40 >= b.x && punchX <= b.x + b.width) {
+            const relY = punchY - b.y;
+            const floor = Math.floor(relY / b.tileH);
+            const relX = (punchX + 20) - b.x;
+            const col = Math.floor(relX / b.tileW);
+
+            if (b.grid && floor >= 0 && floor < b.grid.length) {
+              const row = b.grid[floor];
+              if (row && col >= 0 && col < row.length) {
+                const tile = row[col];
+                if (tile) {
+                  if (tile.state === 0 && tile.slideProgress > 0.1) {
+                    // Eating Military Window Soldier!
+                    tile.soldierPhase = "INACTIVE";
+                    tile.slideProgress = 0.0;
+                    tile.soldierTimer = 0;
+                    this.hp = Math.min(100, this.hp + 15);
+                    this.score += 500;
+                    MetroMonsters.Audio.playEat();
+                    MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "+15 HP / EAT SOLDIER!", "#00ff7f");
+                  } else if (tile.state === 2) {
+                    if (tile.hasCivilian) {
+                      tile.hasCivilian = false;
+                      tile.itemType = null; // EXACTLY ONE OBJECT PER WINDOW: Eating civilian clears item!
+                      this.hp = Math.min(100, this.hp + 15);
+                      this.score += 500;
+                      MetroMonsters.Audio.playEat();
+                      MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "+15 HP", "#00ff7f");
+                    } else if (tile.itemType) {
+                      // Interactive Item Interactions!
+                      const item = tile.itemType;
+                      tile.hasCivilian = false;
+                      tile.itemType = null; // EXACTLY ONE OBJECT PER WINDOW: Interacting clears window!
+                      if (item === "FOOD") {
+                        this.hp = Math.min(100, this.hp + 15);
+                        this.score += 500;
+                        MetroMonsters.Audio.playEat();
+                        MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "+15 HP FOOD", "#00ff7f");
+                      } else if (item === "SHOWER") {
+                        this.hp = Math.min(100, this.hp + 25);
+                        this.score += 750;
+                        MetroMonsters.Audio.playEat();
+                        MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "+25 HP SHOWER", "#38bdf8");
+                        MetroMonsters.VFX.spawnDust(this.x, this.y - 20, 10);
+                      } else if (item === "FIRE_PEPPER") {
+                        this.fireBreathTimer = 600; // 10 Seconds Fire Breathing!
+                        MetroMonsters.Audio.playFireball();
+                        MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "FIRE BREATH!", "#ff6d00");
+                      } else if (item === "ELECTRIC_WIRE") {
+                        this.electroShockTimer = 36; // 0.6s Electrocution Shock Animation Frame!
+                        this.hp -= 10;
+                        MetroMonsters.Audio.playShock();
+                        MetroMonsters.VFX.spawnExplosion(this.x, this.y - 30);
+                        MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "ELECTROCUTED! -10 HP", "#ffff00");
+                      } else if (item === "DYNAMITE") {
+                        this.hp -= 12;
+                        this.vy = -3.0;
+                        this.vx = this.facingLeft ? 2 : -2;
+                        MetroMonsters.Audio.playExplosion();
+                        MetroMonsters.VFX.spawnExplosion(this.x, this.y - 30);
+                        MetroMonsters.VFX.spawnTextPopup(this.x, this.y - 30, "BOOM! -12 HP", "#ff1744");
+                      }
+                    }
+                  } else {
+                    b.damageTile(col, floor);
+                    this.score += 50;
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      MetroMonsters.AIDirector.checkVehiclePunch(punchBox, this);
+    }
+
+    render(ctx) {
+      if (!this.isAlive) return;
+      if (this.electroShockTimer > 0) {
+        // Flashing Electrocuted Skeleton Shock Frame (1986 Arcade Effect)
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        if (this.facingLeft) ctx.scale(-1, 1);
+
+        const isWhite = Math.floor(Date.now() / 60) % 2 === 0;
+        ctx.fillStyle = isWhite ? "#ffffff" : "#0f172a";
+        ctx.fillRect(-this.size * 0.35, -this.size * 0.85, this.size * 0.7, this.size * 0.85);
+
+        ctx.strokeStyle = isWhite ? "#000000" : "#ffffff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -this.size * 0.7, 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, -this.size * 0.55);
+        ctx.lineTo(0, -this.size * 0.2);
+        ctx.moveTo(-16, -this.size * 0.45); ctx.lineTo(16, -this.size * 0.45);
+        ctx.moveTo(-14, -this.size * 0.35); ctx.lineTo(14, -this.size * 0.35);
+        ctx.stroke();
+
+        // Flashing Electric Sparks
+        ctx.strokeStyle = Math.floor(Date.now() / 40) % 2 === 0 ? "#ffff00" : "#38bdf8";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-this.size * 0.45, -this.size * 0.6);
+        ctx.lineTo(-this.size * 0.25, -this.size * 0.4);
+        ctx.lineTo(-this.size * 0.5, -this.size * 0.2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(this.size * 0.45, -this.size * 0.6);
+        ctx.lineTo(this.size * 0.25, -this.size * 0.4);
+        ctx.lineTo(this.size * 0.5, -this.size * 0.2);
+        ctx.stroke();
+
+        ctx.restore();
+      } else {
+        MetroMonsters.Sprites.drawMonster(ctx, this.id, this.x, this.y, this.size, this.facingLeft, this.isClimbing, this.isPunching, this.isFrontFacing);
+      }
+    }
+  }
+
+  return Object.freeze({ Monster });
+})();
+
+/* ===== PHYSICS & COLLISION ENGINE ===== */
+MetroMonsters.Physics = (() => {
+  return Object.freeze({ update: () => {} });
+})();
+
+/* ===== AI DIRECTOR (Tanks, Police Cars & Attack Helicopters) ===== */
+MetroMonsters.AIDirector = (() => {
+  let vehicles = [];
+  let helicopters = [];
+  let groundCivilians = [];
+  let projectiles = [];
+  let fireballs = [];
+
+  class Vehicle {
+    constructor(type) {
+      this.type = type;
+      this.width = type === "tank" ? 80 : 64;
+      this.height = 40;
+      this.alive = false;
+      this.respawnTimer = 120;
+      this.hasEnteredScreen = false;
+      this.resetPosition();
+    }
+
+    resetPosition() {
+      const spawnLeft = Math.random() > 0.5;
+      this.x = spawnLeft ? -120 : MetroMonsters.Constants.VIEWPORT.WIDTH + 120;
+      this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y - this.height;
+      this.facingLeft = !spawnLeft;
+      this.vx = 0;
+      this.maxSpeed = this.type === "tank" ? 1.0 : 1.5;
+      this.shootTimer = Math.floor(MetroMonsters.Utils.randomRange(90, 180));
+      this.isStopped = false;
+      this.hasEnteredScreen = false;
+    }
+
+    update(monsters) {
+      if (!this.alive) {
+        this.respawnTimer--;
+        if (this.respawnTimer <= 0) {
+          this.alive = true;
+          this.resetPosition();
+        }
+        return;
+      }
+
+      // Detect when vehicle has FULLY entered the visible screen area (well past the edge margins)
+      if (!this.hasEnteredScreen && this.x >= 120 && this.x <= MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 120) {
+        this.hasEnteredScreen = true;
+      }
+
+      // Track closest active player monster
+      let target = null;
+      let minDist = 99999;
+      monsters.forEach(m => {
+        if (m && m.isAlive) {
+          const dist = Math.abs(m.x - (this.x + this.width / 2));
+          if (dist < minDist) {
+            minDist = dist;
+            target = m;
+          }
+        }
+      });
+
+      if (!this.hasEnteredScreen) {
+        // MUST drive fully onto screen first! NO stopping or turning back while entering from edge!
+        this.isStopped = false;
+        const targetVx = this.facingLeft ? -this.maxSpeed : this.maxSpeed;
+        this.vx += (targetVx - this.vx) * 0.12;
+      } else if (target) {
+        const monsterCenterX = target.x;
+        const vehicleCenterX = this.x + this.width / 2;
+        const dist = Math.abs(monsterCenterX - vehicleCenterX);
+
+        // Turn around to face player monster when needed
+        if (monsterCenterX < vehicleCenterX && !this.facingLeft) {
+          this.facingLeft = true;
+        } else if (monsterCenterX > vehicleCenterX && this.facingLeft) {
+          this.facingLeft = false;
+        }
+
+        // Tactical Movement: Drive toward monster until in attack range, then COME TO A COMPLETE STANDSTILL!
+        if (dist <= 320) {
+          // In attack position: STOP MOVING and stay stationary!
+          this.isStopped = true;
+          this.vx *= 0.85;
+          if (Math.abs(this.vx) < 0.05) this.vx = 0;
+        } else {
+          // Too far away! Drive smoothly toward player monster to get in range
+          this.isStopped = false;
+          const targetVx = this.facingLeft ? -this.maxSpeed : this.maxSpeed;
+          this.vx += (targetVx - this.vx) * 0.08;
+        }
+      } else {
+        // Drive smoothly if no player monster active
+        this.isStopped = false;
+        const targetVx = this.facingLeft ? -this.maxSpeed : this.maxSpeed;
+        this.vx += (targetVx - this.vx) * 0.08;
+      }
+
+      this.x += this.vx;
+
+      // ONCE FULLY ON SCREEN, STRICTLY LOCKED FULLY INSIDE PLAYFIELD (CANNOT DRIFT TO EDGE OR OFF SCREEN)!
+      if (this.hasEnteredScreen) {
+        const minX = 100;
+        const maxX = MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 100;
+        if (this.x < minX) {
+          this.x = minX;
+          this.vx = 0;
+        } else if (this.x > maxX) {
+          this.x = maxX;
+          this.vx = 0;
+        }
+      } else {
+        if (this.x < -180 || this.x > MetroMonsters.Constants.VIEWPORT.WIDTH + 180) {
+          this.alive = false;
+          this.respawnTimer = Math.floor(MetroMonsters.Utils.randomRange(1200, 1800));
+        }
+      }
+
+      // Shoot Shells / Bullets at player monster ONLY AFTER VEHICLE HAS FULLY ENTERED THE SCREEN!
+      this.shootTimer--;
+      if (this.shootTimer <= 0) {
+        this.shootTimer = Math.floor(MetroMonsters.Utils.randomRange(140, 240));
+        if (this.hasEnteredScreen && target && target.isAlive && Math.abs(target.x - (this.x + this.width / 2)) < 450) {
+          MetroMonsters.Audio.playShoot();
+          const muzzleX = this.x + (this.facingLeft ? 10 : this.width - 10);
+          const muzzleY = this.y + 10;
+          const angle = Math.atan2((target.y - 35) - muzzleY, target.x - muzzleX);
+          projectiles.push({
+            x: muzzleX,
+            y: muzzleY,
+            vx: Math.cos(angle) * 4.0,
+            vy: Math.sin(angle) * 4.0,
+            damage: this.type === "tank" ? 7 : 2,
+            color: this.type === "tank" ? "#ff6d00" : "#ffff00"
+          });
+        }
+      }
+    }
+
+    // 3D tank turret rotation math (math sux)
+    render(ctx) {
+      if (!this.alive) return;
+      ctx.save();
+      const img = MetroMonsters.Sprites.getImage(this.type === "tank" ? "tank" : "police");
+      if (img && img.complete) {
+        if (this.facingLeft) {
+          ctx.translate(this.x + this.width, this.y);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0, this.width, this.height);
+        } else {
+          ctx.drawImage(img, this.x, this.y, this.width, this.height);
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  class Helicopter {
+    constructor() {
+      this.width = 96;
+      this.height = 48;
+      this.alive = false;
+      this.respawnTimer = Math.floor(MetroMonsters.Utils.randomRange(1200, 1800)); // 20 to 30s initial delay
+      this.hasEnteredScreen = false;
+      this.resetPosition();
+    }
+
+    resetPosition() {
+      const spawnLeft = Math.random() > 0.5;
+      this.x = spawnLeft ? -140 : MetroMonsters.Constants.VIEWPORT.WIDTH + 140;
+      this.y = MetroMonsters.Utils.randomRange(80, 360); // Spawn at varied rooftop/sky heights
+      this.vx = spawnLeft ? 0.9 : -0.9;
+      this.vy = 0;
+      this.facingLeft = !spawnLeft;
+      this.pitchAngle = 0;
+      this.hoverPhase = Math.random() * Math.PI * 2;
+      this.shootTimer = MetroMonsters.Utils.randomRange(140, 240);
+      this.hasEnteredScreen = false;
+    }
+
+    update(monsters) {
+      if (!this.alive) {
+        this.respawnTimer--;
+        if (this.respawnTimer <= 0) {
+          this.alive = true;
+          this.resetPosition();
+        }
+        return;
+      }
+
+      // Detect when helicopter FULLY enters visible sky playfield area
+      if (!this.hasEnteredScreen && this.x >= 120 && this.x <= MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 120) {
+        this.hasEnteredScreen = true;
+      }
+
+      // Track closest active player monster
+      let target = null;
+      let minDist = 99999;
+      monsters.forEach(m => {
+        if (m && m.isAlive) {
+          const dist = Math.hypot(m.x - this.x, m.y - this.y);
+          if (dist < minDist) {
+            minDist = dist;
+            target = m;
+          }
+        }
+      });
+
+      let targetTilt = 0;
+
+      if (!this.hasEnteredScreen) {
+        // MUST fly continuously inward onto screen first! NO stopping or shooting while entering from side!
+        this.vx = this.facingLeft ? -1.0 : 1.0;
+        this.vy = 0;
+        targetTilt = 0;
+      } else if (target) {
+        // Ideal attack hover position (offset 140px to side and 120px above monster)
+        const destX = target.x + (this.facingLeft ? 140 : -140);
+        const destY = Math.max(80, target.y - 120);
+
+        const dx = destX - this.x;
+        const dy = destY - this.y;
+
+        // Smooth turnaround when player moves behind helicopter
+        if (Math.abs(target.x - this.x) > 90) {
+          if (target.x < this.x && !this.facingLeft) {
+            this.facingLeft = true;
+          } else if (target.x > this.x && this.facingLeft) {
+            this.facingLeft = false;
+          }
+        }
+
+        // Damped hover movement with gradual acceleration and smooth deceleration:
+        const isBackingUp = (this.facingLeft && dx > 0) || (!this.facingLeft && dx < 0);
+        const accelX = isBackingUp ? 0.0006 : 0.0015; // Sluggish acceleration from a still hover when backing up
+        const maxSpeedX = isBackingUp ? 0.25 : 0.9;
+
+        if (Math.abs(dx) < 20) {
+          this.vx *= 0.85; // Decelerate smoothly to steady hover
+          if (Math.abs(this.vx) < 0.03) this.vx = 0;
+        } else {
+          this.vx += dx * accelX;
+          this.vx = MetroMonsters.Utils.clamp(this.vx, -maxSpeedX, maxSpeedX);
+        }
+
+        if (Math.abs(dy) < 20) {
+          this.vy *= 0.85; // Decelerate smoothly to steady hover Y
+          if (Math.abs(this.vy) < 0.03) this.vy = 0;
+        } else {
+          this.vy += dy * 0.0012;
+          this.vy = MetroMonsters.Utils.clamp(this.vy, -0.5, 0.5);
+        }
+
+        // Firing rockets & smooth nose tilt towards target
+        const gunX = this.x + (this.facingLeft ? 12 : 84);
+        const gunY = this.y + 28;
+        const angle = Math.atan2((target.y - 30) - gunY, target.x - gunX);
+
+        if (this.facingLeft) {
+          let relAngle = angle - Math.PI;
+          while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+          while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+          targetTilt = MetroMonsters.Utils.clamp(relAngle, -0.35, 0.1);
+        } else {
+          targetTilt = MetroMonsters.Utils.clamp(angle, -0.1, 0.35);
+        }
+
+        this.shootTimer--;
+        if (this.shootTimer <= 0) {
+          this.shootTimer = MetroMonsters.Utils.randomRange(180, 300); // Tactical bursts
+          MetroMonsters.Audio.playShoot();
+          projectiles.push({
+            x: gunX,
+            y: gunY,
+            vx: Math.cos(angle) * 4.2,
+            vy: Math.sin(angle) * 4.2,
+            damage: 3,
+            color: "#ff1744"
+          });
+        }
+      } else {
+        // Rock-solid level flight across screen when no target active
+        this.vx = this.facingLeft ? -0.9 : 0.9;
+        this.vy = 0;
+        targetTilt = 0;
+      }
+
+      this.x += this.vx;
+      this.y += this.vy;
+      this.y = MetroMonsters.Utils.clamp(this.y, 60, 420);
+
+      // ONCE VISIBLE ON SCREEN, CANNOT BACK UP OR DRIFT OFF SCREEN OUT OF VISIBILITY!
+      if (this.hasEnteredScreen) {
+        const minX = 40;
+        const maxX = MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 40;
+        if (this.x < minX) {
+          this.x = minX;
+          this.vx = Math.max(0, this.vx);
+        } else if (this.x > maxX) {
+          this.x = maxX;
+          this.vx = Math.min(0, this.vx);
+        }
+      } else {
+        if (this.x < -200 || this.x > MetroMonsters.Constants.VIEWPORT.WIDTH + 200) {
+          this.alive = false;
+          this.respawnTimer = MetroMonsters.Utils.randomRange(1800, 2700);
+        }
+      }
+
+      // Smoothly interpolate pitch tilt without rapid jitter
+      this.pitchAngle += (targetTilt - this.pitchAngle) * 0.05;
+    }
+
+    render(ctx) {
+      if (!this.alive) return;
+      ctx.save();
+      ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+      ctx.rotate(this.pitchAngle);
+      if (this.facingLeft) {
+        ctx.scale(-1, 1);
+      }
+      const img = MetroMonsters.Sprites.getImage("helicopter");
+      if (img && img.complete) {
+        ctx.drawImage(img, -this.width / 2, -this.height / 2, this.width, this.height);
+      }
+      ctx.restore();
+    }
+  }
+
+  class GroundCivilian {
+    constructor(x, stageIndex) {
+      this.stageIndex = stageIndex || 0;
+      this.x = x;
+      this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y - 32;
+      this.speed = MetroMonsters.Utils.randomChoice([-0.9, -0.7, 0.7, 0.9]);
+      this.width = 24;
+      this.height = 32;
+      this.spritePath = MetroMonsters.Demographics.getCityPedestrianSprite(this.stageIndex);
+      this.isEaten = false;
+      this.respawnTimer = 0;
+      this.shoutSeed = Math.floor(Math.random() * 100);
+    }
+
+    update(monsters) {
+      if (this.isEaten) {
+        this.respawnTimer--;
+        if (this.respawnTimer <= 0) {
+          this.isEaten = false;
+          this.x = MetroMonsters.Utils.randomRange(100, MetroMonsters.Constants.VIEWPORT.WIDTH - 100);
+          this.spritePath = MetroMonsters.Demographics.getCityPedestrianSprite(this.stageIndex);
+        }
+        return;
+      }
+
+      this.x += this.speed;
+      if (this.x < 20 || this.x > MetroMonsters.Constants.VIEWPORT.WIDTH - 20) this.speed *= -1;
+
+      monsters.forEach(m => {
+        if (m && m.isAlive && !this.isEaten) {
+          const isLandingJump = m.vy > 0.5;
+          const isActivelyPunching = m.isPunching;
+          if (isLandingJump || isActivelyPunching) {
+            if (Math.abs(m.x - (this.x + 12)) < 36 && Math.abs(m.y - (this.y + 16)) < 44) {
+              this.isEaten = true;
+              this.respawnTimer = 300;
+              m.hp = Math.min(100, m.hp + 15);
+              m.score += 500;
+              MetroMonsters.Audio.playEat();
+              MetroMonsters.VFX.spawnTextPopup(m.x, m.y - 30, "+15 HP", "#00ff7f");
+            }
+          }
+        }
+      });
+    }
+
+    render(ctx) {
+      if (this.isEaten) return;
+      ctx.save();
+      const img = MetroMonsters.Sprites.getImageByPath(this.spritePath);
+      if (img && img.complete && img.naturalWidth !== 0) {
+        if (this.speed < 0) {
+          ctx.translate(this.x + 32, this.y);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0, 32, 44);
+        } else {
+          ctx.drawImage(img, this.x, this.y, 32, 44);
+        }
+      }
+
+      const shoutCycle = Math.floor(Date.now() / 3200) + this.shoutSeed;
+      if (shoutCycle % 8 === 0) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.fillRect(this.x, this.y - 14, 32, 12);
+        ctx.fillStyle = "#991b1b";
+        ctx.font = "900 9px 'Courier New', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("HELP!", this.x + 16, this.y - 5);
+      }
+      ctx.restore();
+    }
+  }
+
+  class GroundCop {
+    constructor(x) {
+      this.width = 24;
+      this.height = 34;
+      this.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y - 34;
+      this.isEaten = false;
+      this.respawnTimer = 0;
+      this.shootTimer = MetroMonsters.Utils.randomRange(90, 180);
+      this.hasEnteredScreen = false;
+      if (x !== undefined) {
+        this.x = x;
+        this.speed = MetroMonsters.Utils.randomChoice([-0.8, 0.8]);
+        this.facingLeft = this.speed < 0;
+        this.hasEnteredScreen = (this.x >= 100 && this.x <= MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 100);
+      } else {
+        this.resetPosition();
+      }
+    }
+
+    resetPosition() {
+      // Check if an active police car is currently visible on screen to step out of!
+      const activePoliceCar = vehicles.find(v => v && v.alive && v.type === "police" && v.hasEnteredScreen);
+      if (activePoliceCar && Math.random() < 0.65) {
+        // Step out of the Police Car!
+        this.x = activePoliceCar.x + activePoliceCar.width / 2;
+        this.speed = activePoliceCar.facingLeft ? -0.8 : 0.8;
+        this.hasEnteredScreen = true; // Stepping out of active police car on screen
+      } else {
+        // Always enter from the screen side edges (NEVER spawn out of thin air)!
+        const spawnLeft = Math.random() > 0.5;
+        this.x = spawnLeft ? -20 : MetroMonsters.Constants.VIEWPORT.WIDTH + 20;
+        this.speed = spawnLeft ? 0.8 : -0.8;
+        this.hasEnteredScreen = false; // Must walk fully onto screen
+      }
+      this.facingLeft = this.speed < 0;
+      this.shootTimer = MetroMonsters.Utils.randomRange(60, 140);
+    }
+
+    update(monsters) {
+      if (this.isEaten) {
+        this.respawnTimer--;
+        if (this.respawnTimer <= 0) {
+          this.isEaten = false;
+          this.resetPosition();
+        }
+        return;
+      }
+
+      // Detect when ground cop has FULLY entered the visible screen area
+      if (!this.hasEnteredScreen && this.x >= 100 && this.x <= MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 100) {
+        this.hasEnteredScreen = true;
+      }
+
+      // Track closest active player monster for vehicle-style targeting
+      let target = null;
+      let minDist = 99999;
+      monsters.forEach(m => {
+        if (m && m.isAlive) {
+          const dist = Math.abs(m.x - (this.x + 12));
+          if (dist < minDist) {
+            minDist = dist;
+            target = m;
+          }
+        }
+      });
+
+      if (!this.hasEnteredScreen) {
+        // MUST walk fully onto screen first! NO stopping or shooting while entering from side!
+        this.x += this.speed;
+        this.facingLeft = this.speed < 0;
+      } else if (target && minDist < 450) {
+        // SPOTTED MONSTER ON SCREEN: STOP MOVING, TURN TO FACE TARGET, AND STAND FIRM TO SHOOT!
+        this.facingLeft = target.x < (this.x + 12);
+        
+        this.shootTimer--;
+        if (this.shootTimer <= 0) {
+          this.shootTimer = MetroMonsters.Utils.randomRange(100, 180); // Firing interval
+          MetroMonsters.Audio.playShoot();
+          const muzzleX = this.x + (this.facingLeft ? -4 : 28);
+          const muzzleY = this.y + 10;
+          const angle = Math.atan2((target.y - 30) - muzzleY, target.x - muzzleX);
+          projectiles.push({
+            x: muzzleX, y: muzzleY,
+            vx: Math.cos(angle) * 4.5,
+            vy: Math.sin(angle) * 4.5,
+            damage: 2, color: "#ffff00"
+          });
+        }
+      } else {
+        // No monster nearby: patrol slowly along sidewalk
+        this.x += this.speed;
+        if (this.x < 80 || this.x > MetroMonsters.Constants.VIEWPORT.WIDTH - 80) this.speed *= -1;
+        this.facingLeft = this.speed < 0;
+      }
+
+      // ONCE FULLY ON SCREEN, LOCK FULLY INSIDE PLAYFIELD (CANNOT DRIFT OFF SCREEN OR SHOOT FROM EDGE)!
+      if (this.hasEnteredScreen) {
+        const minX = 80;
+        const maxX = MetroMonsters.Constants.VIEWPORT.WIDTH - this.width - 80;
+        if (this.x < minX) {
+          this.x = minX;
+          this.speed = Math.abs(this.speed);
+        } else if (this.x > maxX) {
+          this.x = maxX;
+          this.speed = -Math.abs(this.speed);
+        }
+      }
+
+      // Eating Ground Cop by Punch or Landing Jump!
+      monsters.forEach(m => {
+        if (m && m.isAlive && !this.isEaten) {
+          const isLandingJump = m.vy > 0.5;
+          const isActivelyPunching = m.isPunching;
+          if (isLandingJump || isActivelyPunching) {
+            if (Math.abs(m.x - (this.x + 12)) < 36 && Math.abs(m.y - (this.y + 16)) < 44) {
+              this.isEaten = true;
+              this.respawnTimer = MetroMonsters.Utils.randomRange(900, 1800); // 15-30 seconds timer
+              m.hp = Math.min(100, m.hp + 15);
+              m.score += 500;
+              MetroMonsters.Audio.playEat();
+              MetroMonsters.VFX.spawnTextPopup(m.x, m.y - 30, "+15 HP / EAT COP!", "#00ff7f");
+            }
+          }
+        }
+      });
+    }
+
+    render(ctx) {
+      if (this.isEaten) return;
+      ctx.save();
+      const img = MetroMonsters.Sprites.getImage("ground_cop");
+      if (img && img.complete && img.naturalWidth !== 0) {
+        if (this.facingLeft) {
+          ctx.translate(this.x + 28, this.y);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, 0, 0, 28, 42);
+        } else {
+          ctx.drawImage(img, this.x, this.y, 28, 42);
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  let groundCops = [];
+  let dynamites = [];
+  let vehicleOverlapTimer = 0;
+
+  return Object.freeze({
+    init: (stageIndex = 0) => {
+      const totalStages = MetroMonsters.Constants.STAGES.length;
+      const progressRatio = Math.min(1.0, stageIndex / Math.max(1, totalStages - 1));
+
+      // Dynamic Difficulty Progression Curve across all campaign stages!
+      const targetVehicleCount = Math.min(5, Math.floor(2 + progressRatio * 3)); // 2 to 5 active vehicles (cop cars + tanks)!
+      const targetHeliCount = progressRatio >= 0.4 ? 2 : 1;                      // 1 to 2 active helicopters!
+      const targetCopCount = Math.min(8, Math.floor(2 + progressRatio * 6));    // 2 to 8 active police officers!
+
+      vehicles = [];
+      for (let i = 0; i < targetVehicleCount; i++) {
+        const type = i % 2 === 0 ? "tank" : "police";
+        const v = new Vehicle(type);
+        v.alive = true;
+        v.resetPosition();
+        vehicles.push(v);
+      }
+
+      helicopters = [];
+      for (let i = 0; i < targetHeliCount; i++) {
+        const h = new Helicopter();
+        h.alive = true;
+        h.resetPosition();
+        helicopters.push(h);
+      }
+
+      groundCivilians = [
+        new GroundCivilian(180),
+        new GroundCivilian(420),
+        new GroundCivilian(680),
+        new GroundCivilian(920),
+        new GroundCivilian(1120)
+      ];
+
+      groundCops = [];
+      for (let i = 0; i < targetCopCount; i++) {
+        const spawnX = (i % 2 === 0) ? -20 - (i * 30) : MetroMonsters.Constants.VIEWPORT.WIDTH + 20 + (i * 30);
+        groundCops.push(new GroundCop(spawnX));
+      }
+
+      projectiles = [];
+      fireballs = [];
+      dynamites = [];
+      vehicleOverlapTimer = 0;
+    },
+    spawnFireball: (x, y, vx) => {
+      fireballs.push({ x, y, vx, vy: 0, radius: 10, dead: false });
+    },
+    spawnDynamite: (x, y, vx, vy) => {
+      dynamites.push({ x, y, vx, vy, gravity: 0.15, rotation: 0, alive: true });
+    },
+    spawnSniperBullet: (x, y) => {
+      MetroMonsters.Audio.playShoot();
+      projectiles.push({
+        x: x, y: y,
+        vx: MetroMonsters.Utils.randomChoice([-4.8, 4.8]),
+        vy: 1.5,
+        damage: 2,
+        color: "#ffff00"
+      });
+    },
+    checkVehiclePunch: (punchBox, monster) => {
+      vehicles.forEach(v => {
+        if (v.alive && MetroMonsters.Utils.rectIntersect(punchBox, { x: v.x, y: v.y, w: v.width, h: v.height })) {
+          v.alive = false;
+          v.respawnTimer = MetroMonsters.Utils.randomRange(600, 1200); // 10-20s respawn delay
+          monster.score += 500;
+          MetroMonsters.Audio.playExplosion();
+          MetroMonsters.VFX.spawnExplosion(v.x + v.width / 2, v.y + v.height / 2);
+          MetroMonsters.VFX.spawnTextPopup(v.x + v.width / 2, v.y - 20, "+500 PTS", "#ffcc00");
+        }
+      });
+      helicopters.forEach(h => {
+        if (h.alive && MetroMonsters.Utils.rectIntersect(punchBox, { x: h.x, y: h.y, w: h.width, h: h.height })) {
+          h.alive = false;
+          h.respawnTimer = Math.floor(MetroMonsters.Utils.randomRange(2400, 3600)); // 40-60s delay after destruction
+          monster.score += 1000;
+          MetroMonsters.Audio.playExplosion();
+          MetroMonsters.VFX.spawnExplosion(h.x + h.width / 2, h.y + h.height / 2);
+          MetroMonsters.VFX.spawnTextPopup(h.x + h.width / 2, h.y - 20, "HELI DOWN! +1000", "#ffcc00");
+        }
+      });
+    },
+    checkVehicleCrush: (monsterBox, monster) => {
+      if (monster.vy <= 0.5) return;
+      vehicles.forEach(v => {
+        if (v.alive && MetroMonsters.Utils.rectIntersect(monsterBox, { x: v.x, y: v.y, w: v.width, h: v.height })) {
+          v.alive = false;
+          v.respawnTimer = MetroMonsters.Utils.randomRange(600, 1200); // 10-20s respawn delay
+          monster.score += 500;
+          monster.vy = -2.8;
+          MetroMonsters.Audio.playExplosion();
+          MetroMonsters.VFX.spawnExplosion(v.x + v.width / 2, v.y + v.height / 2);
+          MetroMonsters.VFX.spawnTextPopup(v.x + v.width / 2, v.y - 20, "CRUSHED! +500", "#ffcc00");
+        }
+      });
+      helicopters.forEach(h => {
+        if (h.alive && MetroMonsters.Utils.rectIntersect(monsterBox, { x: h.x, y: h.y, w: h.width, h: h.height })) {
+          h.alive = false;
+          h.respawnTimer = Math.floor(MetroMonsters.Utils.randomRange(2400, 3600)); // 40-60s delay after destruction
+          monster.score += 1000;
+          monster.vy = -3.2;
+          MetroMonsters.Audio.playExplosion();
+          MetroMonsters.VFX.spawnExplosion(h.x + h.width / 2, h.y + h.height / 2);
+          MetroMonsters.VFX.spawnTextPopup(h.x + h.width / 2, h.y - 20, "HELI CRUSHED! +1000", "#ffcc00");
+        }
+      });
+    },
+    update: (monsters) => {
+      vehicles.forEach(v => v.update(monsters));
+
+      // Allow vehicles to pass each other freely! ONLY un-stick if occupying the same spot for > 2 seconds (120 frames):
+      if (vehicles.length >= 2) {
+        const v1 = vehicles[0];
+        const v2 = vehicles[1];
+        if (v1 && v2 && v1.alive && v2.alive && v1.hasEnteredScreen && v2.hasEnteredScreen) {
+          const center1 = v1.x + v1.width / 2;
+          const center2 = v2.x + v2.width / 2;
+          const isOccupyingSameSpot = Math.abs(center1 - center2) < 40;
+
+          if (isOccupyingSameSpot) {
+            vehicleOverlapTimer++;
+            // ONLY if stuck occupying the same spot for MORE than 2 seconds (120 frames):
+            if (vehicleOverlapTimer >= 120) {
+              const nudge = center1 <= center2 ? -1.5 : 1.5;
+              v1.x += nudge;
+              v2.x -= nudge;
+              v1.x = MetroMonsters.Utils.clamp(v1.x, 30, MetroMonsters.Constants.VIEWPORT.WIDTH - v1.width - 30);
+              v2.x = MetroMonsters.Utils.clamp(v2.x, 30, MetroMonsters.Constants.VIEWPORT.WIDTH - v2.width - 30);
+            }
+          } else {
+            vehicleOverlapTimer = 0;
+          }
+        } else {
+          vehicleOverlapTimer = 0;
+        }
+      }
+      // Prevent Helicopters from stacking on top of each other!
+      if (helicopters.length >= 2) {
+        for (let i = 0; i < helicopters.length; i++) {
+          for (let j = i + 1; j < helicopters.length; j++) {
+            const h1 = helicopters[i];
+            const h2 = helicopters[j];
+            if (h1 && h2 && h1.alive && h2.alive && h1.hasEnteredScreen && h2.hasEnteredScreen) {
+              const dx = (h1.x + h1.width / 2) - (h2.x + h2.width / 2);
+              const dy = (h1.y + h1.height / 2) - (h2.y + h2.height / 2);
+              const dist = Math.hypot(dx, dy);
+              if (dist < 110) {
+                const force = (110 - dist) * 0.05;
+                const angle = Math.atan2(dy, dx) || (i % 2 === 0 ? 0.5 : -0.5);
+                h1.x += Math.cos(angle) * force;
+                h1.y += Math.sin(angle) * force;
+                h2.x -= Math.cos(angle) * force;
+                h2.y -= Math.sin(angle) * force;
+
+                h1.y = MetroMonsters.Utils.clamp(h1.y, 60, 400);
+                h2.y = MetroMonsters.Utils.clamp(h2.y, 60, 400);
+              }
+            }
+          }
+        }
+      }
+
+      helicopters.forEach(h => h.update(monsters));
+      groundCivilians.forEach(c => c.update(monsters));
+      groundCops.forEach(cop => cop.update(monsters));
+      MetroMonsters.Audio.updateRotorSound(helicopters);
+
+      // Update Arched Window Soldiers Dynamite Projectiles
+      for (let i = dynamites.length - 1; i >= 0; i--) {
+        const d = dynamites[i];
+        d.x += d.vx;
+        d.y += d.vy;
+        d.vy += d.gravity;
+        d.rotation += 0.2;
+
+        monsters.forEach(m => {
+          if (m && m.isAlive && d.alive) {
+            if (Math.abs(m.x - d.x) < 32 && Math.abs((m.y - 30) - d.y) < 40) {
+              d.alive = false;
+              m.hp -= 10;
+              MetroMonsters.VFX.spawnExplosion(d.x, d.y);
+              MetroMonsters.VFX.spawnTextPopup(m.x, m.y - 30, "-10 HP DYNAMITE!", "#ff1744");
+            }
+          }
+        });
+
+        if (d.y >= MetroMonsters.Constants.VIEWPORT.ROAD_Y) {
+          d.alive = false;
+          MetroMonsters.VFX.spawnExplosion(d.x, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 10);
+        }
+
+        if (!d.alive || d.x < 0 || d.x > MetroMonsters.Constants.VIEWPORT.WIDTH) {
+          dynamites.splice(i, 1);
+        }
+      }
+
+      // Update Fireball Projectiles
+      for (let i = fireballs.length - 1; i >= 0; i--) {
+        const fb = fireballs[i];
+        fb.x += fb.vx;
+        MetroMonsters.VFX.spawnDust(fb.x, fb.y, 1);
+
+        // Check Fireball damaging buildings & vehicles
+        const buildings = MetroMonsters.BuildingManager.getBuildings();
+        buildings.forEach(b => {
+          if (!b.isDestroyed && !b.isCollapsing) {
+            if (fb.x >= b.x && fb.x <= b.x + b.width && fb.y >= b.y && fb.y <= b.y + b.height) {
+              const relY = fb.y - b.y;
+              const floor = Math.floor(relY / b.tileH);
+              const col = Math.floor((fb.x - b.x) / b.tileW);
+              b.damageTile(col, floor);
+              fb.dead = true;
+            }
+          }
+        });
+
+        if (fb.dead || fb.x < 0 || fb.x > MetroMonsters.Constants.VIEWPORT.WIDTH) {
+          fireballs.splice(i, 1);
+        }
+      }
+
+      // Update Enemy Projectiles
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        monsters.forEach(m => {
+          if (m && m.isAlive) {
+            if (Math.abs(m.x - p.x) < 32 && Math.abs((m.y - 30) - p.y) < 40) {
+              m.hp -= p.damage;
+              MetroMonsters.VFX.spawnTextPopup(m.x, m.y - 30, `-${p.damage} HP`, "#ff1744");
+              MetroMonsters.Audio.playExplosion();
+              p.dead = true;
+            }
+          }
+        });
+
+        if (p.dead || p.x < 0 || p.x > MetroMonsters.Constants.VIEWPORT.WIDTH || p.y < 0 || p.y > MetroMonsters.Constants.VIEWPORT.ROAD_Y + 50) {
+          projectiles.splice(i, 1);
+        }
+      }
+    },
+    render: (ctx) => {
+      vehicles.forEach(v => v.render(ctx));
+      helicopters.forEach(h => h.render(ctx));
+      groundCivilians.forEach(c => c.render(ctx));
+      groundCops.forEach(cop => cop.render(ctx));
+
+      // Render Lit Arched Dynamite Sticks
+      dynamites.forEach(d => {
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rotation);
+        ctx.fillStyle = "#dc2626";
+        ctx.fillRect(-6, -3, 12, 6);
+        ctx.fillStyle = "#ffff00";
+        ctx.fillRect(6, -2, 3, 3);
+        ctx.restore();
+      });
+
+      // Render Fireballs
+      fireballs.forEach(fb => {
+        ctx.fillStyle = "#ff4500";
+        ctx.beginPath();
+        ctx.arc(fb.x, fb.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffff00";
+        ctx.beginPath();
+        ctx.arc(fb.x, fb.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Render Enemy Bullets
+      projectiles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  });
+})();
+
+/* ===== UI SHELL & MODE SELECT ===== */
+MetroMonsters.UI = (() => {
+  let gameMode = 1;
+  let p1SelectIndex = 0;
+  let p2SelectIndex = 1;
+  const rosterKeys = ["MANNY", "LIZ", "LYALL"];
+
+  return Object.freeze({
+    getGameMode: () => gameMode,
+    updateTitle: () => {
+      const p1 = MetroMonsters.Input.getPlayerInput(1);
+      if (p1.wasPressed.up || p1.wasPressed.down) {
+        gameMode = gameMode === 1 ? 2 : 1;
+        MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+      }
+    },
+    renderTitle: (ctx) => {
+      ctx.fillStyle = "#05050c";
+      ctx.fillRect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.HEIGHT);
+
+      ctx.fillStyle = "#ff2233";
+      ctx.font = "900 84px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "rgba(255, 34, 51, 0.8)";
+      ctx.shadowBlur = 25;
+      ctx.fillText("METRO MONSTERS", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 140);
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "bold 24px 'Courier New', monospace";
+      ctx.fillText("MODERN RETRO ARCADE EDITION", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 190);
+
+      ctx.fillStyle = gameMode === 1 ? "rgba(255, 204, 0, 0.2)" : "rgba(30, 41, 59, 0.6)";
+      ctx.fillRect(440, 260, 400, 60);
+      ctx.strokeStyle = gameMode === 1 ? "#ffcc00" : "#475569";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(440, 260, 400, 60);
+      ctx.fillStyle = gameMode === 1 ? "#ffcc00" : "#cbd5e1";
+      ctx.font = "bold 24px 'Courier New', monospace";
+      ctx.fillText("1 PLAYER  (SOLO MODE)", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 298);
+
+      ctx.fillStyle = gameMode === 2 ? "rgba(0, 255, 127, 0.2)" : "rgba(30, 41, 59, 0.6)";
+      ctx.fillRect(440, 350, 400, 60);
+      ctx.strokeStyle = gameMode === 2 ? "#00ff7f" : "#475569";
+      ctx.strokeRect(440, 350, 400, 60);
+      ctx.fillStyle = gameMode === 2 ? "#00ff7f" : "#cbd5e1";
+      ctx.fillText("2 PLAYER LOCAL CO-OP", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 388);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 26px 'Courier New', monospace";
+      ctx.fillText("CLICK OR PRESS [SPACE / ENTER] TO START", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 520);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "16px 'Courier New', monospace";
+      ctx.fillText("P1: A/D Walk Left/Right | S Face Front | SPACEBAR Jump | W Climb Wall", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 600);
+      ctx.fillText("P2: Arrow Keys Walk/Down | M Jump | N Punch | Up Climb Wall", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 630);
+    },
+    updateSelectLobby: () => {
+      const p1 = MetroMonsters.Input.getPlayerInput(1);
+      const p2 = MetroMonsters.Input.getPlayerInput(2);
+      const click = MetroMonsters.Input.getClickPos();
+
+      if (click) {
+        // Mouse Click on Character Cards (Manny: 220-480, Liz: 540-800, Lyall: 860-1120)
+        rosterKeys.forEach((key, idx) => {
+          const cardX = 220 + idx * 320;
+          const cardY = 150;
+          if (click.x >= cardX && click.x <= cardX + 260 && click.y >= cardY && click.y <= cardY + 380) {
+            p1SelectIndex = idx;
+            MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+          }
+        });
+      }
+
+      if (p1.wasPressed.left) p1SelectIndex = (p1SelectIndex + 2) % 3;
+      if (p1.wasPressed.right) p1SelectIndex = (p1SelectIndex + 1) % 3;
+
+      if (gameMode === 2) {
+        if (p2.wasPressed.left) p2SelectIndex = (p2SelectIndex + 2) % 3;
+        if (p2.wasPressed.right) p2SelectIndex = (p2SelectIndex + 1) % 3;
+      }
+    },
+    renderSelectLobby: (ctx) => {
+      ctx.fillStyle = "#070a14";
+      ctx.fillRect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.HEIGHT);
+
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "bold 52px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("CHARACTER SELECT", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 85);
+
+      rosterKeys.forEach((key, idx) => {
+        const charConfig = MetroMonsters.Constants.ROSTER[key];
+        const cardX = 220 + idx * 320;
+        const cardY = 150;
+        const isP1 = p1SelectIndex === idx;
+        const isP2 = gameMode === 2 && p2SelectIndex === idx;
+
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(cardX, cardY, 260, 380);
+        
+        ctx.strokeStyle = isP1 ? "#ffcc00" : (isP2 ? "#00ff7f" : "#475569");
+        ctx.lineWidth = (isP1 || isP2) ? 6 : 2;
+        ctx.strokeRect(cardX, cardY, 260, 380);
+
+        MetroMonsters.Sprites.drawMonster(ctx, charConfig.id, cardX + 130, cardY + 140, 100, false, false, false, false);
+
+        ctx.fillStyle = charConfig.accentColor;
+        ctx.font = "bold 26px 'Courier New', monospace";
+        ctx.fillText(charConfig.name, cardX + 130, cardY + 240);
+
+        if (isP1) {
+          ctx.fillStyle = "#ffcc00";
+          ctx.fillRect(cardX + 20, cardY + 310, 100, 32);
+          ctx.fillStyle = "#000";
+          ctx.font = "bold 16px 'Courier New', monospace";
+          ctx.fillText("P1 READY", cardX + 70, cardY + 332);
+        }
+
+        if (isP2) {
+          ctx.fillStyle = "#00ff7f";
+          ctx.fillRect(cardX + 140, cardY + 310, 100, 32);
+          ctx.fillStyle = "#000";
+          ctx.font = "bold 16px 'Courier New', monospace";
+          ctx.fillText("P2 READY", cardX + 190, cardY + 332);
+        }
+      });
+
+      // Perfectly Fitted START GAME Button Banner (No Overflow!)
+      ctx.fillStyle = "rgba(30, 41, 59, 0.95)";
+      ctx.fillRect(240, 565, 800, 56);
+      ctx.strokeStyle = "#ffcc00";
+      ctx.lineWidth = 3;
+        ctx.strokeRect(240, 565, 800, 56);
+
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "bold 20px 'Courier New', monospace";
+      ctx.fillText("PRESS [SPACE / ENTER] OR CLICK ANYWHERE TO START", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 600);
+    },
+    renderHUD: (ctx, p1, p2, currentStageIndex = 0) => {
+      const stage = MetroMonsters.Constants.STAGES[currentStageIndex % MetroMonsters.Constants.STAGES.length];
+      
+      // P1 Score & HP Bar (Top Left)
+      if (p1) {
+        ctx.fillStyle = "#ffcc00";
+        ctx.font = "bold 18px 'Courier New', monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(`P1: ${p1.name} SCORE: ${p1.score}`, 30, 32);
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(30, 40, 220, 14);
+        ctx.fillStyle = p1.hp > 30 ? "#ffcc00" : "#ff1744";
+        ctx.fillRect(30, 40, (Math.max(0, p1.hp) / 100) * 220, 14);
+
+        if (p1.fireBreathTimer > 0) {
+          ctx.fillStyle = "#ff4500";
+          ctx.font = "bold 13px 'Courier New', monospace";
+          ctx.fillText(`FIRE BREATH: ${Math.ceil(p1.fireBreathTimer / 60)}s`, 30, 70);
+        }
+      }
+
+      // Stage Title Badge (Centered cleanly between P1 & P2 scores)
+      const stageTitleText = `DAY ${stage.day}: ${stage.cityName}`;
+      ctx.save();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.fillRect(490, 12, 300, 36);
+      ctx.strokeStyle = "#475569";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(490, 12, 300, 36);
+
+      ctx.fillStyle = "#e2e8f0";
+      // Dynamic font scaling so long city names (SAN FRANCISCO, HONG KONG, CHINA) fit perfectly!
+      const fontSize = stageTitleText.length > 20 ? 14 : (stageTitleText.length > 16 ? 16 : 18);
+      ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+      ctx.textAlign = "center";
+      ctx.fillText(stageTitleText, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 35);
+      ctx.restore();
+
+      // P2 Score & HP Bar (Positioned under Top-Controls DOM buttons so text NEVER collides!)
+      if (p2) {
+        ctx.fillStyle = "#00ff7f";
+        ctx.font = "bold 18px 'Courier New', monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(`P2: ${p2.name} SCORE: ${p2.score}`, MetroMonsters.Constants.VIEWPORT.WIDTH - 30, 32);
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(MetroMonsters.Constants.VIEWPORT.WIDTH - 250, 40, 220, 14);
+        ctx.fillStyle = p2.hp > 30 ? "#00ff7f" : "#ff1744";
+        ctx.fillRect(MetroMonsters.Constants.VIEWPORT.WIDTH - 250, 40, (Math.max(0, p2.hp) / 100) * 220, 14);
+      } else {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "bold 14px 'Courier New', monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ PRESS START FOR 2P ]", MetroMonsters.Constants.VIEWPORT.WIDTH - 30, 68);
+      }
+    },
+    renderStageClear: (ctx, stageIndex) => {
+      const stage = MetroMonsters.Constants.STAGES[stageIndex % MetroMonsters.Constants.STAGES.length];
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+      ctx.fillRect(180, 240, 920, 220);
+      ctx.strokeStyle = "#ffcc00";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(180, 240, 920, 220);
+
+      const clearTitle = `DAY ${stage.day}: ${stage.cityName} DESTROYED!`;
+      // Dynamic font scaling for stage clear title so SAN FRANCISCO & HONG KONG, CHINA fit 100%!
+      const titleFontSize = clearTitle.length > 28 ? 32 : (clearTitle.length > 22 ? 38 : 46);
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = `900 ${titleFontSize}px 'Courier New', monospace`;
+      ctx.textAlign = "center";
+      ctx.fillText(clearTitle, MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 310);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "bold 30px 'Courier New', monospace";
+      ctx.fillText("STAGE CLEAR! +2,000 PTS BONUS", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 375);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 20px 'Courier New', monospace";
+      ctx.fillText("NEXT CITY LOADING...", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 425);
+      ctx.restore();
+    },
+        renderVictory: (ctx, p1, p2) => {
+      ctx.save();
+
+      // CINEMATIC DESTRUCTION SKYLINE IN BACKGROUND
+      const roadY = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+      ctx.fillStyle = "#1e1b4b";
+      ctx.fillRect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.HEIGHT);
+
+      // Crumbling Sinking Skyscrapers & Fire Explosions
+      const animTime = Math.floor(Date.now() / 80);
+      for (let i = 0; i < 16; i++) {
+        const bx = i * 82;
+        const sinkY = Math.min(roadY - 30, (animTime * 2 + i * 15) % 360);
+        ctx.fillStyle = (i % 2 === 0) ? "#334155" : "#1e293b";
+        ctx.fillRect(bx, roadY - 340 + sinkY, 68, 340 - sinkY);
+
+        if ((animTime + i) % 3 === 0) {
+          ctx.fillStyle = "#ff6d00";
+          ctx.beginPath();
+          ctx.arc(bx + 34, roadY - 340 + sinkY, 24, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffff00";
+          ctx.beginPath();
+          ctx.arc(bx + 34, roadY - 340 + sinkY, 12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Ground Rubble
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, roadY - 20, MetroMonsters.Constants.VIEWPORT.WIDTH, 160);
+
+      // GOLD & RETRO ARCADE VICTORY OVERLAY BANNER
+      ctx.fillStyle = "rgba(15, 5, 29, 0.90)";
+      ctx.fillRect(100, 80, 1080, 560);
+      ctx.strokeStyle = "#ffcc00";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(100, 80, 1080, 560);
+
+      // VICTORY HEADLINE
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "900 44px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("CONGRATULATIONS!", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 140);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "bold 22px 'Courier New', monospace";
+      ctx.fillText("YOU HAVE LAID WASTE TO CONCRETE JUNGLES ACROSS THE WORLD!", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 185);
+
+      // CARTOONY FLEXING MONSTER TRIO ILLUSTRATION (Manny, Liz, Lyall)
+      const cx = MetroMonsters.Constants.VIEWPORT.WIDTH / 2;
+      const my = 430;
+
+      // 1. CARTOON MANNY (Gorilla Flexing Muscle Arms with Huge Grin)
+      ctx.save();
+      ctx.translate(cx - 260, my);
+      // Feet & Body
+      ctx.fillStyle = "#451a03";
+      ctx.beginPath(); ctx.arc(0, -50, 48, 0, Math.PI * 2); ctx.fill();
+      // Flexed Bicep Arms
+      ctx.fillStyle = "#78350f";
+      ctx.beginPath(); ctx.arc(-42, -75, 26, 0, Math.PI * 2); ctx.fill(); // Left Bicep
+      ctx.beginPath(); ctx.arc(42, -75, 26, 0, Math.PI * 2); ctx.fill();  // Right Bicep
+      // Championship Belt
+      ctx.fillStyle = "#b45309"; ctx.fillRect(-36, -30, 72, 16);
+      ctx.fillStyle = "#eab308"; ctx.fillRect(-12, -34, 24, 24);
+      // Head & Face
+      ctx.fillStyle = "#451a03"; ctx.beginPath(); ctx.arc(0, -100, 36, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#d97706"; ctx.beginPath(); ctx.arc(0, -95, 24, 0, Math.PI * 2); ctx.fill();
+      // Big Cartoony Grin & Teeth
+      ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.arc(0, -90, 16, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(-12, -90, 24, 6);
+      // Eyes
+      ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(-10, -108, 6, 0, Math.PI*2); ctx.arc(10, -108, 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#000000"; ctx.beginPath(); ctx.arc(-9, -108, 2.5, 0, Math.PI*2); ctx.arc(11, -108, 2.5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // 2. CARTOON LIZ (Giant Lizard Flexing with Big Grin & Pink Tongue)
+      ctx.save();
+      ctx.translate(cx, my);
+      // Lizard Body & Tail
+      ctx.fillStyle = "#15803d";
+      ctx.beginPath(); ctx.arc(0, -55, 46, 0, Math.PI * 2); ctx.fill();
+      // Back Spikes
+      ctx.fillStyle = "#eab308";
+      ctx.beginPath(); ctx.moveTo(-20, -140); ctx.lineTo(0, -170); ctx.lineTo(20, -140); ctx.fill();
+      // Flexed Bicep Arms
+      ctx.fillStyle = "#16a34a";
+      ctx.beginPath(); ctx.arc(-42, -80, 24, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(42, -80, 24, 0, Math.PI * 2); ctx.fill();
+      // Championship Belt
+      ctx.fillStyle = "#b45309"; ctx.fillRect(-36, -30, 72, 16);
+      ctx.fillStyle = "#eab308"; ctx.fillRect(-12, -34, 24, 24);
+      // Lizard Head & Snout
+      ctx.fillStyle = "#16a34a"; ctx.beginPath(); ctx.arc(0, -105, 36, 0, Math.PI * 2); ctx.fill();
+      // Huge Toothy Grin & Pink Tongue
+      ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.arc(0, -98, 20, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = "#f472b6"; ctx.beginPath(); ctx.arc(0, -88, 10, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(-14, -98, 28, 5);
+      // Eyes
+      ctx.fillStyle = "#eab308"; ctx.beginPath(); ctx.arc(-11, -118, 8, 0, Math.PI*2); ctx.arc(11, -118, 8, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#000000"; ctx.beginPath(); ctx.arc(-10, -118, 3, 0, Math.PI*2); ctx.arc(12, -118, 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // 3. CARTOON LYALL (Werewolf Flexing Furry Arms with Sharp Teeth)
+      ctx.save();
+      ctx.translate(cx + 260, my);
+      // Furry Body
+      ctx.fillStyle = "#475569";
+      ctx.beginPath(); ctx.arc(0, -50, 46, 0, Math.PI * 2); ctx.fill();
+      // Flexed Furry Bicep Arms & Claws
+      ctx.fillStyle = "#64748b";
+      ctx.beginPath(); ctx.arc(-42, -75, 25, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(42, -75, 25, 0, Math.PI * 2); ctx.fill();
+      // Championship Belt
+      ctx.fillStyle = "#b45309"; ctx.fillRect(-36, -30, 72, 16);
+      ctx.fillStyle = "#eab308"; ctx.fillRect(-12, -34, 24, 24);
+      // Wolf Snout & Pointy Ears
+      ctx.fillStyle = "#334155";
+      ctx.beginPath(); ctx.moveTo(-30, -125); ctx.lineTo(-20, -155); ctx.lineTo(-5, -125); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(5, -125); ctx.lineTo(20, -155); ctx.lineTo(30, -125); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -100, 34, 0, Math.PI * 2); ctx.fill();
+      // Goofy Sharp Tooth Smile
+      ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.arc(0, -92, 18, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.moveTo(-12, -92); ctx.lineTo(-8, -84); ctx.lineTo(-4, -92); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4, -92); ctx.lineTo(8, -84); ctx.lineTo(12, -92); ctx.fill();
+      // Eyes
+      ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(-10, -108, 6, 0, Math.PI*2); ctx.arc(10, -108, 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#000000"; ctx.beginPath(); ctx.arc(-9, -108, 2.5, 0, Math.PI*2); ctx.arc(11, -108, 2.5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // SCORES & RETURN PROMPT
+      if (p1) {
+        ctx.fillStyle = "#ffcc00";
+        ctx.font = "bold 20px 'Courier New', monospace";
+        ctx.fillText(`P1 FINAL SCORE: ${p1.score}`, cx - 180, 560);
+      }
+      if (p2) {
+        ctx.fillStyle = "#00ff7f";
+        ctx.font = "bold 20px 'Courier New', monospace";
+        ctx.fillText(`P2 FINAL SCORE: ${p2.score}`, cx + 180, 560);
+      }
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 18px 'Courier New', monospace";
+      ctx.fillText("PRESS [SPACE / ENTER] TO RETURN TO TITLE", cx, 610);
+      ctx.restore();
+    },
+    renderPause: (ctx) => {
+      ctx.save();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.fillRect(340, 240, 600, 220);
+      ctx.strokeStyle = "#ffcc00";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(340, 240, 600, 220);
+
+      ctx.fillStyle = "#ffcc00";
+      ctx.font = "900 44px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("GAME PAUSED", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 320);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "bold 20px 'Courier New', monospace";
+      ctx.fillText("PRESS [P] OR [ESC] TO RESUME", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 385);
+      ctx.restore();
+    },
+    getSelectedRoster: () => {
+      return {
+        p1: MetroMonsters.Constants.ROSTER[rosterKeys[p1SelectIndex]],
+        p2: MetroMonsters.Constants.ROSTER[rosterKeys[p2SelectIndex]]
+      };
+    }
+  });
+})();
+
+/* ===== CANVAS RENDERER & DYNAMIC SKY THEMES ===== */
+MetroMonsters.Renderer = (() => {
+  let canvas = null;
+  let ctx = null;
+
+  function renderCityLandmarks(ctx, stageIndex, theme) {
+    ctx.save();
+    ctx.fillStyle = theme.silhouetteColor;
+    const roadY = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+
+    // Standard city skyline base
+    for (let i = 0; i < 18; i++) {
+      const bx = i * 76;
+      const bh = 110 + ((i * 41 + stageIndex * 23) % 100);
+      ctx.fillRect(bx, roadY - bh, 56, bh);
+    }
+
+    // Custom Iconic Landmark Silhouette per City!
+    const city = (MetroMonsters.Constants.STAGES[stageIndex % MetroMonsters.Constants.STAGES.length].cityName || "").toUpperCase();
+
+    if (city.includes("CHICAGO")) {
+      // Willis (Sears) Tower with Twin Antennas
+      ctx.fillRect(600, roadY - 320, 80, 320);
+      ctx.fillRect(615, roadY - 360, 50, 40);
+      ctx.fillRect(625, roadY - 390, 30, 30);
+      ctx.fillRect(630, roadY - 440, 4, 50); // Left antenna
+      ctx.fillRect(646, roadY - 440, 4, 50); // Right antenna
+    } else if (city.includes("NEW YORK")) {
+      // Empire State Building Needle Spire
+      ctx.fillRect(620, roadY - 300, 70, 300);
+      ctx.fillRect(635, roadY - 360, 40, 60);
+      ctx.fillRect(645, roadY - 420, 20, 60);
+      ctx.fillRect(653, roadY - 470, 4, 50); // Needle tip
+    } else if (city.includes("LOS ANGELES")) {
+      // Hollywood Hills Contour & Palm Trees
+      ctx.beginPath();
+      ctx.moveTo(0, roadY - 60);
+      ctx.quadraticCurveTo(320, roadY - 180, 640, roadY - 90);
+      ctx.quadraticCurveTo(960, roadY - 200, 1280, roadY - 70);
+      ctx.lineTo(1280, roadY);
+      ctx.lineTo(0, roadY);
+      ctx.fill();
+
+      // Palm Trees
+      [140, 420, 860, 1140].forEach(px => {
+        ctx.fillRect(px, roadY - 140, 8, 140);
+        ctx.beginPath();
+        ctx.arc(px + 4, roadY - 140, 28, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    } else if (city.includes("SAN FRANCISCO")) {
+      // Golden Gate Bridge Suspension Towers & Cables
+      ctx.fillRect(240, roadY - 260, 24, 260);
+      ctx.fillRect(800, roadY - 260, 24, 260);
+      ctx.strokeStyle = theme.silhouetteColor;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, roadY - 180);
+      ctx.quadraticCurveTo(252, roadY - 260, 520, roadY - 120);
+      ctx.quadraticCurveTo(812, roadY - 260, 1280, roadY - 180);
+      ctx.stroke();
+    } else if (city.includes("TOKYO")) {
+      // Tokyo Tower Red Lattice Spire & Mt. Fuji Cone
+      ctx.beginPath();
+      ctx.moveTo(100, roadY);
+      ctx.lineTo(340, roadY - 220);
+      ctx.lineTo(580, roadY);
+      ctx.fill();
+
+      // Tokyo Tower Lattice
+      ctx.beginPath();
+      ctx.moveTo(880, roadY);
+      ctx.lineTo(940, roadY - 420);
+      ctx.lineTo(1000, roadY);
+      ctx.fill();
+      ctx.fillRect(920, roadY - 240, 40, 20);
+    } else if (city.includes("SEATTLE")) {
+      // Space Needle Disc & Spire
+      ctx.fillRect(630, roadY - 380, 16, 380);
+      ctx.beginPath();
+      ctx.ellipse(638, roadY - 340, 48, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(636, roadY - 420, 4, 40); // Spire tip
+    } else if (city.includes("LAS VEGAS")) {
+      // Luxor Pyramid & High-Roller Ferris Wheel
+      ctx.beginPath();
+      ctx.moveTo(140, roadY);
+      ctx.lineTo(320, roadY - 240);
+      ctx.lineTo(500, roadY);
+      ctx.fill();
+
+      // Ferris Wheel
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = theme.silhouetteColor;
+      ctx.beginPath();
+      ctx.arc(920, roadY - 180, 100, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (city.includes("LONDON")) {
+      // Big Ben Gothic Clock Tower & Clock Face
+      ctx.fillRect(600, roadY - 340, 64, 340);
+      ctx.beginPath();
+      ctx.moveTo(590, roadY - 340);
+      ctx.lineTo(632, roadY - 430);
+      ctx.lineTo(674, roadY - 340);
+      ctx.fill();
+      ctx.fillStyle = theme.moonColor;
+      ctx.beginPath();
+      ctx.arc(632, roadY - 300, 14, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (city.includes("PARIS")) {
+      // Eiffel Tower Lattice Spire & Sweep Beacon Light
+      ctx.beginPath();
+      ctx.moveTo(520, roadY);
+      ctx.lineTo(640, roadY - 440);
+      ctx.lineTo(760, roadY);
+      ctx.fill();
+      ctx.fillRect(600, roadY - 260, 80, 20);
+
+      // Arc de Triomphe
+      ctx.fillRect(180, roadY - 140, 120, 140);
+      ctx.clearRect(220, roadY - 80, 40, 80);
+    } else if (city.includes("RIO")) {
+      // Corcovado Mountain Peak & Christ the Redeemer Statue
+      ctx.beginPath();
+      ctx.moveTo(400, roadY);
+      ctx.lineTo(640, roadY - 260);
+      ctx.lineTo(880, roadY);
+      ctx.fill();
+
+      // Christ Statue Outstretched Arms Silhouette
+      ctx.fillRect(635, roadY - 320, 10, 60);
+      ctx.fillRect(610, roadY - 310, 60, 8);
+        } else if (city.includes("CAIRO")) {
+      // Three Great Pyramids of Giza
+      ctx.beginPath();
+      ctx.moveTo(80, roadY); ctx.lineTo(320, roadY - 220); ctx.lineTo(560, roadY);
+      ctx.moveTo(440, roadY); ctx.lineTo(680, roadY - 260); ctx.lineTo(920, roadY);
+      ctx.moveTo(820, roadY); ctx.lineTo(1020, roadY - 180); ctx.lineTo(1220, roadY);
+      ctx.fill();
+    } else if (city.includes("TORONTO")) {
+      // CN Tower Needle & Rogers Centre Dome
+      ctx.fillRect(630, roadY - 420, 16, 420);
+      ctx.beginPath(); ctx.ellipse(638, roadY - 360, 40, 14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(636, roadY - 470, 4, 50);
+      ctx.beginPath(); ctx.arc(280, roadY, 80, Math.PI, 0); ctx.fill();
+    } else if (city.includes("MONTERREY")) {
+      // Cerro de la Silla Saddle Mountain & Faro del Comercio Spire
+      ctx.beginPath();
+      ctx.moveTo(0, roadY); ctx.lineTo(280, roadY - 240); ctx.lineTo(500, roadY - 160); ctx.lineTo(760, roadY - 280); ctx.lineTo(1100, roadY);
+      ctx.fill();
+      ctx.fillRect(920, roadY - 340, 14, 340);
+    } else if (city.includes("MOSCOW")) {
+      // Saint Basil's Cathedral Onion Domes & Kremlin Towers
+      [240, 480, 800, 1020].forEach((kx, idx) => {
+        ctx.fillRect(kx, roadY - 220, 48, 220);
+        ctx.beginPath(); ctx.arc(kx + 24, roadY - 250, 20 + (idx % 2)*6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(kx + 22, roadY - 290, 4, 40);
+      });
+    } else if (city.includes("JOHANNESBURG")) {
+      // Hillbrow Telkom Tower Pod & Ponte City Cylinder
+      ctx.fillRect(630, roadY - 420, 14, 420);
+      ctx.beginPath(); ctx.ellipse(637, roadY - 350, 32, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(280, roadY - 320, 70, 320);
+    } else if (city.includes("KUWAIT")) {
+      // Kuwait Spherical Spire Towers
+      ctx.fillRect(630, roadY - 430, 12, 430);
+      ctx.beginPath(); ctx.arc(636, roadY - 310, 28, 0, Math.PI * 2); ctx.arc(636, roadY - 380, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(820, roadY - 320, 8, 320);
+      ctx.beginPath(); ctx.arc(824, roadY - 240, 18, 0, Math.PI * 2); ctx.fill();
+    } else if (city.includes("MUMBAI")) {
+      // Gateway of India Stone Archway & Bandra-Worli Sea Link Towers
+      ctx.fillRect(520, roadY - 220, 160, 220);
+      ctx.clearRect(570, roadY - 140, 60, 140);
+      ctx.beginPath(); ctx.moveTo(140, roadY); ctx.lineTo(240, roadY - 320); ctx.lineTo(340, roadY); ctx.fill();
+    } else if (city.includes("MELBOURNE")) {
+      // Eureka Tower Gold Crown & Royal Exhibition Building Dome
+      ctx.fillRect(620, roadY - 380, 60, 380);
+      ctx.fillRect(610, roadY - 410, 80, 30); // Gold crown top
+      ctx.beginPath(); ctx.arc(320, roadY - 180, 60, Math.PI, 0); ctx.fill();
+    } else if (city.includes("AUCKLAND")) {
+      // Sky Tower Pod & Needle
+      ctx.fillRect(630, roadY - 430, 14, 430);
+      ctx.beginPath(); ctx.ellipse(637, roadY - 350, 42, 14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(635, roadY - 470, 4, 40);
+    } else if (city.includes("SYDNEY")) {
+      // Sydney Opera House Sails & Harbour Bridge Arch
+      ctx.beginPath();
+      ctx.moveTo(160, roadY); ctx.lineTo(240, roadY - 140); ctx.lineTo(320, roadY);
+      ctx.moveTo(260, roadY); ctx.lineTo(340, roadY - 180); ctx.lineTo(420, roadY);
+      ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = theme.silhouetteColor;
+      ctx.beginPath(); ctx.arc(860, roadY, 180, Math.PI, Math.PI * 2); ctx.stroke();
+    } else if (city.includes("SHANGHAI")) {
+      // Oriental Pearl Tower Double Spheres & Shanghai Tower Spiral
+      ctx.fillRect(630, roadY - 420, 14, 420);
+      ctx.beginPath();
+      ctx.arc(637, roadY - 220, 36, 0, Math.PI * 2);
+      ctx.arc(637, roadY - 340, 22, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (city.includes("SINGAPORE")) {
+      // Marina Bay Sands 3 Towers & Surfboard Sky Park Roof
+      ctx.fillRect(520, roadY - 280, 45, 280);
+      ctx.fillRect(600, roadY - 280, 45, 280);
+      ctx.fillRect(680, roadY - 280, 45, 280);
+      // Surfboard SkyPark
+      ctx.fillRect(490, roadY - 300, 260, 20);
+    } else if (city.includes("DUBAI")) {
+      // Burj Khalifa Ultra-Tall Stepped Mega Spire
+      ctx.fillRect(610, roadY - 260, 80, 260);
+      ctx.fillRect(625, roadY - 340, 50, 80);
+      ctx.fillRect(635, roadY - 420, 30, 80);
+      ctx.fillRect(647, roadY - 480, 6, 60); // Needle top
+    } else if (city.includes("HONG KONG")) {
+      // Victoria Peak Mountain & Bank of China Triangular Spire
+      ctx.beginPath();
+      ctx.moveTo(0, roadY);
+      ctx.lineTo(380, roadY - 320);
+      ctx.lineTo(820, roadY - 180);
+      ctx.lineTo(1280, roadY - 280);
+      ctx.lineTo(1280, roadY); ctx.lineTo(0, roadY);
+      ctx.fill();
+
+      // Bank of China Spire
+      ctx.fillRect(840, roadY - 420, 16, 420);
+      ctx.beginPath();
+      ctx.moveTo(810, roadY); ctx.lineTo(848, roadY - 400); ctx.lineTo(886, roadY);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  return Object.freeze({
+    init: (canvasEl) => {
+      canvas = canvasEl;
+      ctx = canvas.getContext("2d");
+    },
+    clear: (stageIndex = 0) => {
+      const stage = MetroMonsters.Constants.STAGES[stageIndex % MetroMonsters.Constants.STAGES.length];
+      const theme = stage.skyTheme;
+
+      // Dynamic City Sky Gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, MetroMonsters.Constants.VIEWPORT.ROAD_Y);
+      grad.addColorStop(0, theme.top);
+      grad.addColorStop(0.45, theme.mid);
+      grad.addColorStop(1, theme.bottom);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.ROAD_Y);
+
+      // Moon / Sun Rendering
+      ctx.save();
+      ctx.fillStyle = theme.moonColor;
+      ctx.beginPath();
+      ctx.arc(1060, 90, 28, 0, Math.PI * 2);
+      ctx.fill();
+      if (theme.moonType === "crescent") {
+        ctx.fillStyle = theme.top;
+        ctx.beginPath();
+        ctx.arc(1072, 84, 24, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Dynamic City Landmark Scenery Backgrounds!
+      renderCityLandmarks(ctx, stageIndex, theme);
+    },
+    renderRoad: () => {
+      if (!ctx) return;
+      // ROAD SURFACE & SIDEWALK (Renders over building base, beneath entities & monsters)
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(0, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 10, MetroMonsters.Constants.VIEWPORT.WIDTH, 140);
+      ctx.fillStyle = "#f59e0b";
+      for (let x = 20; x < MetroMonsters.Constants.VIEWPORT.WIDTH; x += 60) {
+        ctx.fillRect(x, MetroMonsters.Constants.VIEWPORT.ROAD_Y + 40, 32, 6);
+      }
+      ctx.fillStyle = "#64748b";
+      ctx.fillRect(0, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 10, MetroMonsters.Constants.VIEWPORT.WIDTH, 4);
+    },
+    getCtx: () => ctx
+  });
+})();
+
+/* ===== GAME STATE STORE & MAIN LOOP ===== */
+MetroMonsters.Engine = (() => {
+  let state = "TITLE";
+  let p1Monster = null;
+  let p2Monster = null;
+  let currentStageIndex = 0;
+  let stageClearTimer = 0;
+
+  function update() {
+    if (MetroMonsters.Input.wasPausePressed()) {
+      if (state === "PLAYING") {
+        state = "PAUSED";
+        MetroMonsters.Input.clearPressed();
+        return;
+      } else if (state === "PAUSED") {
+        state = "PLAYING";
+        MetroMonsters.Input.clearPressed();
+        return;
+      }
+    }
+
+    if (state === "PAUSED") {
+      MetroMonsters.Audio.updateMusic(currentStageIndex, false);
+      return;
+    }
+
+    if (state === "TITLE") {
+      MetroMonsters.UI.updateTitle();
+      if (MetroMonsters.Input.isConfirmPressed(1)) {
+        MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+        state = "SELECT";
+        MetroMonsters.Input.clearPressed();
+      }
+    } else if (state === "SELECT") {
+      MetroMonsters.UI.updateSelectLobby();
+
+      const p1Input = MetroMonsters.Input.getPlayerInput(1);
+      const p2Input = MetroMonsters.Input.getPlayerInput(2);
+      const isConfirmKey = p1Input.wasPressed.punch || p1Input.wasPressed.jump || p2Input.wasPressed.punch || p2Input.wasPressed.jump;
+
+      if (isConfirmKey || MetroMonsters.Input.isConfirmPressed(1) || MetroMonsters.Input.isConfirmPressed(2)) {
+        const chosen = MetroMonsters.UI.getSelectedRoster();
+        const is2P = MetroMonsters.UI.getGameMode() === 2;
+        currentStageIndex = 0;
+        p1Monster = new MetroMonsters.Entities.Monster(1, chosen.p1, false);
+        p2Monster = is2P ? new MetroMonsters.Entities.Monster(2, chosen.p2, false) : null;
+        MetroMonsters.BuildingManager.loadStage(currentStageIndex);
+        MetroMonsters.AIDirector.init(currentStageIndex);
+        MetroMonsters.Audio.playRoar();
+        state = "PLAYING";
+        MetroMonsters.Input.clearPressed();
+      }
+    } else if (state === "PLAYING") {
+      MetroMonsters.Audio.updateMusic(currentStageIndex, true);
+      const activeMonsters = [p1Monster, p2Monster].filter(Boolean);
+      MetroMonsters.BuildingManager.update();
+      MetroMonsters.AIDirector.update(activeMonsters);
+      if (p1Monster) p1Monster.update();
+      if (p2Monster) p2Monster.update();
+      MetroMonsters.VFX.update();
+
+      if (MetroMonsters.BuildingManager.areAllBuildingsDestroyed()) {
+        const totalStages = MetroMonsters.Constants.STAGES.length;
+        if (currentStageIndex >= totalStages - 1) {
+          // Cleared final boss city (Day 15: HONG KONG, CHINA)!
+          state = "VICTORY";
+          stageClearTimer = 360;
+          MetroMonsters.Audio.playRoar();
+          if (p1Monster && p1Monster.isAlive) p1Monster.score += 10000;
+          if (p2Monster && p2Monster.isAlive) p2Monster.score += 10000;
+        } else {
+          state = "STAGE_CLEAR";
+          stageClearTimer = 180;
+          MetroMonsters.Audio.playRoar();
+          if (p1Monster && p1Monster.isAlive) p1Monster.score += 2000;
+          if (p2Monster && p2Monster.isAlive) p2Monster.score += 2000;
+        }
+      }
+    } else if (state === "STAGE_CLEAR") {
+      MetroMonsters.Audio.updateMusic(currentStageIndex, false);
+      stageClearTimer--;
+      MetroMonsters.VFX.update();
+      if (stageClearTimer <= 0) {
+        currentStageIndex++;
+        MetroMonsters.BuildingManager.loadStage(currentStageIndex);
+        MetroMonsters.AIDirector.init(currentStageIndex);
+
+        if (p1Monster) {
+          p1Monster.x = 280;
+          p1Monster.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+          p1Monster.isClimbing = false;
+          p1Monster.attachedBuilding = null;
+        }
+        if (p2Monster) {
+          p2Monster.x = 720;
+          p2Monster.y = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+          p2Monster.isClimbing = false;
+          p2Monster.attachedBuilding = null;
+        }
+
+        MetroMonsters.Audio.playRoar();
+        state = "PLAYING";
+      }
+    } else if (state === "VICTORY") {
+      MetroMonsters.Audio.updateMusic(currentStageIndex, false);
+      stageClearTimer--;
+      if (Math.random() < 0.35) {
+        MetroMonsters.VFX.spawnExplosion(MetroMonsters.Utils.randomRange(100, 1180), MetroMonsters.Utils.randomRange(100, 400));
+      }
+      MetroMonsters.VFX.update();
+      if (stageClearTimer <= 0 || MetroMonsters.Input.isConfirmPressed(1) || MetroMonsters.Input.isConfirmPressed(2)) {
+        state = "TITLE";
+      }
+    } else {
+      MetroMonsters.Audio.updateMusic(currentStageIndex, false);
+    }
+  }
+
+  function render() {
+    const ctx = MetroMonsters.Renderer.getCtx();
+    if (!ctx) return;
+
+    if (state === "TITLE") {
+      MetroMonsters.UI.renderTitle(ctx);
+    } else if (state === "SELECT") {
+      MetroMonsters.UI.renderSelectLobby(ctx);
+    } else if (state === "PLAYING" || state === "STAGE_CLEAR" || state === "VICTORY" || state === "PAUSED") {
+      MetroMonsters.Renderer.clear(currentStageIndex);
+      MetroMonsters.BuildingManager.render(ctx);
+      MetroMonsters.Renderer.renderRoad();
+      MetroMonsters.AIDirector.render(ctx);
+      if (p1Monster) p1Monster.render(ctx);
+      if (p2Monster) p2Monster.render(ctx);
+      MetroMonsters.VFX.render(ctx);
+      MetroMonsters.UI.renderHUD(ctx, p1Monster, p2Monster, currentStageIndex);
+
+      if (state === "STAGE_CLEAR") {
+        MetroMonsters.UI.renderStageClear(ctx, currentStageIndex);
+      } else if (state === "VICTORY") {
+        MetroMonsters.UI.renderVictory(ctx, p1Monster, p2Monster);
+      } else if (state === "PAUSED") {
+        MetroMonsters.UI.renderPause(ctx);
+      }
+    }
+  }
+
+  function loop() {
+    try {
+      update();
+      render();
+    } catch (err) {
+      console.error("Engine Loop Exception:", err);
+    }
+    MetroMonsters.Input.clearPressed();
+    requestAnimationFrame(loop);
+  }
+
+  return Object.freeze({
+    start: () => { requestAnimationFrame(loop); },
+    togglePause: () => {
+      if (state === "PLAYING") state = "PAUSED";
+      else if (state === "PAUSED") state = "PLAYING";
+    }
+  });
+})();
+
+/* ===== BOOTSTRAP INITIALIZATION ===== */
+MetroMonsters.Bootstrap = (() => {
+  function fitCanvas() {
+    const wrapper = document.getElementById("game-wrapper");
+    if (!wrapper) return;
+
+    const targetW = 1280;
+    const targetH = 720;
+    const targetAspect = targetW / targetH;
+
+    // Use full inner viewport bounds (accounting for fullscreen mode and window resize)
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    // Strictly enforce 16:9 aspect ratio scaling with letterboxing / pillarboxing!
+    let fitW = winW;
+    let fitH = winW / targetAspect;
+
+    if (fitH > winH) {
+      fitH = winH;
+      fitW = winH * targetAspect;
+    }
+
+    const scale = fitW / targetW;
+    wrapper.style.transform = `scale(${scale})`;
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const canvas = document.getElementById("game-canvas");
+    MetroMonsters.Renderer.init(canvas);
+
+    fitCanvas();
+    window.addEventListener("resize", fitCanvas);
+    document.addEventListener("fullscreenchange", fitCanvas);
+    window.addEventListener("orientationchange", () => { setTimeout(fitCanvas, 100); });
+
+    document.getElementById("fullscreen-btn").addEventListener("click", () => {
+      const target = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (target.requestFullscreen) target.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    const pauseBtn = document.getElementById("pause-btn");
+    if (pauseBtn) {
+      pauseBtn.addEventListener("click", () => {
+        MetroMonsters.Engine.togglePause();
+      });
+    }
+
+    const crtOverlay = document.getElementById("crt-overlay");
+    const crtBtn = document.getElementById("crt-toggle-btn");
+    crtBtn.addEventListener("click", () => {
+      crtOverlay.classList.toggle("disabled");
+      crtBtn.textContent = crtOverlay.classList.contains("disabled") ? "CRT: OFF" : "CRT: ON";
+    });
+
+    const sfxBtn = document.getElementById("sfx-toggle-btn");
+    if (sfxBtn) {
+      sfxBtn.addEventListener("click", () => {
+        MetroMonsters.Constants.AUDIO.SFX_ENABLED = !MetroMonsters.Constants.AUDIO.SFX_ENABLED;
+        sfxBtn.textContent = MetroMonsters.Constants.AUDIO.SFX_ENABLED ? "SOUNDS: ON" : "SOUNDS: OFF";
+      });
+    }
+
+    const musicBtn = document.getElementById("music-toggle-btn");
+    if (musicBtn) {
+      musicBtn.addEventListener("click", () => {
+        MetroMonsters.Constants.AUDIO.MUSIC_ENABLED = !MetroMonsters.Constants.AUDIO.MUSIC_ENABLED;
+        musicBtn.textContent = MetroMonsters.Constants.AUDIO.MUSIC_ENABLED ? "MUSIC: ON" : "MUSIC: OFF";
+      });
+    }
+
+    MetroMonsters.Engine.start();
+  });
+})();
+</script>
+</body>
+</html>
