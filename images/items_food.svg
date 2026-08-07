@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 64" width="256" height="64">
+  <!-- Food & Hazard Items -->
+  <defs>
+    <!-- Roast Chicken (+15 HP) -->
+    <g id="item-chicken">
+      <ellipse cx="20" cy="36" rx="16" ry="12" fill="#d84315" stroke="#4e342e" stroke-width="2"/>
+      <path d="M 28 30 L 40 22" stroke="#d84315" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="42" cy="20" r="4" fill="#ffffff" stroke="#4e342e" stroke-width="2"/>
+    </g>
+    <!-- Milk Jug (+10 HP) -->
+    <g id="item-milk">
+      <rect x="74" y="20" width="16" height="28" rx="3" fill="#ffffff" stroke="#90a4ae" stroke-width="2"/>
+      <rect x="78" y="14" width="8" height="6" fill="#29b6f6"/>
+    </g>
+    <!-- Fruit Bowl (+10 HP) -->
+    <g id="item-fruit">
+      <ellipse cx="140" cy="38" rx="16" ry="8" fill="#795548" stroke="#3e2723" stroke-width="2"/>
+      <circle cx="132" cy="30" r="6" fill="#e53935"/>
+      <circle cx="144" cy="28" r="6" fill="#fbc02d"/>
+      <circle cx="140" cy="34" r="5" fill="#43a047"/>
+    </g>
+    <!-- Toaster Electrocution Hazard (-15 HP) -->
+    <g id="item-toaster">
+      <rect x="186" y="22" width="24" height="20" rx="4" fill="#b0bec5" stroke="#37474f" stroke-width="2"/>
+      <line x1="192" y1="22" x2="192" y2="16" stroke="#e0e0e0" stroke-width="3"/>
+      <line x1="204" y1="22" x2="204" y2="16" stroke="#e0e0e0" stroke-width="3"/>
+      <!-- Sparks -->
+      <polygon points="196,12 200,4 198,14" fill="#ffeb3b"/>
+    </g>
+  </defs>
+
+  <use href="#item-chicken" x="0" y="0"/>
+  <use href="#item-milk" x="64" y="0"/>
+  <use href="#item-fruit" x="128" y="0"/>
+  <use href="#item-toaster" x="192" y="0"/>
+</svg>

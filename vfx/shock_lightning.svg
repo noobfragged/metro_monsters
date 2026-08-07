@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Shock Lightning VFX -->
+  <g id="shock-lightning">
+    <polygon points="36,2 16,30 32,30 20,62 50,26 32,26" fill="#00e5ff" stroke="#ffffff" stroke-width="2"/>
+    <polygon points="34,8 20,30 30,30 22,54 44,28 32,28" fill="#ffff00"/>
+  </g>
+</svg>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="48" height="64">
+  <!-- Detailed Screaming Restaurant Chef SVG Sprite -->
+  <g id="screaming-chef">
+    <!-- Shadow -->
+    <ellipse cx="24" cy="60" rx="16" ry="4" fill="rgba(0,0,0,0.35)"/>
+    
+    <!-- Black Trousers & Shoes -->
+    <rect x="14" y="42" width="7" height="16" rx="3" fill="#0f172a" stroke="#000000" stroke-width="1.5"/>
+    <rect x="12" y="54" width="9" height="5" rx="2" fill="#1e293b"/>
+
+    <rect x="27" y="42" width="7" height="16" rx="3" fill="#0f172a" stroke="#000000" stroke-width="1.5"/>
+    <rect x="27" y="54" width="9" height="5" rx="2" fill="#1e293b"/>
+
+    <!-- Double-Breasted White Chef Coat & Red Neckerchief -->
+    <rect x="10" y="22" width="28" height="22" rx="3" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <!-- Chef Coat Black Buttons -->
+    <circle cx="16" cy="28" r="1.5" fill="#0f172a"/>
+    <circle cx="16" cy="34" r="1.5" fill="#0f172a"/>
+    <circle cx="32" cy="28" r="1.5" fill="#0f172a"/>
+    <circle cx="32" cy="34" r="1.5" fill="#0f172a"/>
+    <!-- Red Neckerchief -->
+    <polygon points="20,22 28,22 24,28" fill="#dc2626"/>
+
+    <!-- Panicked Waving Arms Up -->
+    <path d="M 12 24 L 4 12 L 8 10 L 15 22 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <circle cx="5" cy="10" r="4" fill="#e5c07b"/>
+
+    <path d="M 36 24 L 44 12 L 40 10 L 33 22 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <circle cx="43" cy="10" r="4" fill="#e5c07b"/>
+
+    <!-- Head & Screaming Face (Golden Tan Tone) -->
+    <circle cx="24" cy="14" r="10" fill="#e5c07b" stroke="#d9a05b" stroke-width="1.5"/>
+    <!-- Tall White Toque Chef Hat -->
+    <path d="M 12 12 C 10 0, 38 0, 36 12 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="12" y="10" width="24" height="4" fill="#e2e8f0"/>
+
+    <!-- Wide Panicked Eyes -->
+    <circle cx="20" cy="14" r="2.5" fill="#ffffff"/>
+    <circle cx="20" cy="14" r="1" fill="#000000"/>
+    <circle cx="28" cy="14" r="2.5" fill="#ffffff"/>
+    <circle cx="28" cy="14" r="1" fill="#000000"/>
+
+    <!-- Wide Open Screaming Mouth -->
+    <ellipse cx="24" cy="19" rx="3.5" ry="4.5" fill="#7f1d1d" stroke="#000000" stroke-width="1"/>
+    <rect x="22" y="15.5" width="4" height="1.5" fill="#ffffff"/>
+  </g>
+</svg>

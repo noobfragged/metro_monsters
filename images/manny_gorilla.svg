@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 112" width="96" height="112">
+  <!-- George the Giant Gorilla (King Kong Retro Arcade) -->
+  <g id="george-gorilla">
+    <!-- Drop Shadow -->
+    <ellipse cx="48" cy="106" rx="36" ry="6" fill="rgba(0,0,0,0.35)"/>
+    <!-- Feet -->
+    <ellipse cx="30" cy="100" rx="12" ry="6" fill="#3e2723"/>
+    <ellipse cx="66" cy="100" rx="12" ry="6" fill="#3e2723"/>
+    <!-- Legs -->
+    <rect x="22" y="80" width="16" height="22" rx="6" fill="#5c341e"/>
+    <rect x="58" y="80" width="16" height="22" rx="6" fill="#5c341e"/>
+    <!-- Torso / Body -->
+    <ellipse cx="48" cy="62" rx="34" ry="28" fill="#5c341e" stroke="#2a160b" stroke-width="3"/>
+    <!-- Muscle Chest (Tan) -->
+    <path d="M 32 46 C 32 40 64 40 64 46 C 64 64 58 74 48 74 C 38 74 32 64 32 46 Z" fill="#bcaaa4" stroke="#5c341e" stroke-width="2"/>
+    <line x1="48" y1="46" x2="48" y2="70" stroke="#8d6e63" stroke-width="2"/>
+    <line x1="36" y1="58" x2="60" y2="58" stroke="#8d6e63" stroke-width="2"/>
+    <!-- Massive Arms -->
+    <path d="M 16 42 Q 6 62 14 84" fill="none" stroke="#5c341e" stroke-width="18" stroke-linecap="round"/>
+    <path d="M 80 42 Q 90 62 82 84" fill="none" stroke="#5c341e" stroke-width="18" stroke-linecap="round"/>
+    <!-- Fists -->
+    <circle cx="14" cy="86" r="10" fill="#3e2723"/>
+    <circle cx="82" cy="86" r="10" fill="#3e2723"/>
+    <!-- Gorilla Head -->
+    <ellipse cx="48" cy="24" rx="20" ry="17" fill="#5c341e" stroke="#2a160b" stroke-width="3"/>
+    <!-- Ears -->
+    <circle cx="26" cy="24" r="5" fill="#5c341e"/>
+    <circle cx="70" cy="24" r="5" fill="#5c341e"/>
+    <!-- Brow Ridge -->
+    <rect x="32" y="16" width="32" height="6" rx="2" fill="#3e2723"/>
+    <!-- Muzzle / Face -->
+    <ellipse cx="48" cy="28" rx="13" ry="10" fill="#bcaaa4"/>
+    <!-- Nostrils -->
+    <circle cx="44" cy="26" r="2" fill="#2a160b"/>
+    <circle cx="52" cy="26" r="2" fill="#2a160b"/>
+    <!-- Angry Yellow Eyes -->
+    <circle cx="40" cy="19" r="3" fill="#ffcc00"/>
+    <circle cx="40" cy="19" r="1.5" fill="#000000"/>
+    <circle cx="56" cy="19" r="3" fill="#ffcc00"/>
+    <circle cx="56" cy="19" r="1.5" fill="#000000"/>
+    <!-- Roaring Mouth with Fangs -->
+    <path d="M 38 32 Q 48 38 58 32 Q 48 34 38 32 Z" fill="#7f1d1d"/>
+    <polygon points="41,32 43,35 45,32" fill="#ffffff"/>
+    <polygon points="51,32 53,35 55,32" fill="#ffffff"/>
+  </g>
+</svg>

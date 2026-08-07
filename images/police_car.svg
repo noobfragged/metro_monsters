@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 48" width="96" height="48">
+  <!-- Police Car with Flashing Siren -->
+  <g id="police-car">
+    <!-- Shadow -->
+    <ellipse cx="48" cy="42" rx="42" ry="4" fill="rgba(0,0,0,0.3)"/>
+    <!-- Car Body -->
+    <path d="M 8 34 L 16 22 L 34 14 L 62 14 L 78 22 L 88 34 Z" fill="#1e293b" stroke="#0f172a" stroke-width="2"/>
+    <!-- White Doors & Roof -->
+    <rect x="32" y="16" width="32" height="18" fill="#f8fafc"/>
+    <!-- Windows -->
+    <polygon points="36,18 46,18 46,24 34,24" fill="#38bdf8"/>
+    <polygon points="48,18 60,18 62,24 48,24" fill="#38bdf8"/>
+    <!-- Red & Blue Siren Lights -->
+    <rect x="42" y="10" width="6" height="4" fill="#ef4444"/>
+    <rect x="48" y="10" width="6" height="4" fill="#3b82f6"/>
+    <!-- Wheels -->
+    <circle cx="24" cy="36" r="7" fill="#0f172a" stroke="#64748b" stroke-width="2"/>
+    <circle cx="72" cy="36" r="7" fill="#0f172a" stroke="#64748b" stroke-width="2"/>
+    <!-- Headlights -->
+    <rect x="86" y="28" width="4" height="6" fill="#fef08a"/>
+  </g>
+</svg>

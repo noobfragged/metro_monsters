@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 64" width="48" height="64">
+  <!-- Detailed Screaming Arcade Construction/Office Worker Civilian -->
+  <g id="screaming-worker">
+    <!-- Shadow -->
+    <ellipse cx="24" cy="60" rx="16" ry="4" fill="rgba(0,0,0,0.35)"/>
+    
+    <!-- Heavy Workboots & Denim Jeans -->
+    <rect x="13" y="42" width="8" height="16" rx="2" fill="#1e3a8a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="11" y="54" width="10" height="6" rx="2" fill="#78350f"/>
+
+    <rect x="27" y="42" width="8" height="16" rx="2" fill="#1e3a8a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="27" y="54" width="10" height="6" rx="2" fill="#78350f"/>
+
+    <!-- High-Visibility Orange Safety Vest & Green Shirt -->
+    <rect x="10" y="22" width="28" height="22" rx="3" fill="#16a34a" stroke="#14532d" stroke-width="2"/>
+    <!-- Safety Vest Overlayer -->
+    <path d="M 12 22 L 20 22 L 20 44 L 10 44 Z" fill="#ea580c"/>
+    <path d="M 36 22 L 28 22 L 28 44 L 38 44 Z" fill="#ea580c"/>
+    <rect x="12" y="32" width="24" height="4" fill="#facc15"/>
+
+    <!-- Panicked Waving Arms -->
+    <path d="M 12 24 L 4 12 L 8 10 L 15 22 Z" fill="#ea580c" stroke="#c2410c" stroke-width="1.5"/>
+    <circle cx="5" cy="10" r="4" fill="#fed7aa"/>
+
+    <path d="M 36 24 L 44 12 L 40 10 L 33 22 Z" fill="#ea580c" stroke="#c2410c" stroke-width="1.5"/>
+    <circle cx="43" cy="10" r="4" fill="#fed7aa"/>
+
+    <!-- Head & Hardhat Cap -->
+    <circle cx="24" cy="14" r="10" fill="#fed7aa" stroke="#f97316" stroke-width="1.5"/>
+    <!-- Yellow Hardhat Construction Cap -->
+    <path d="M 10 12 C 10 2, 38 2, 38 12 Z" fill="#eab308" stroke="#a16207" stroke-width="2"/>
+    <rect x="8" y="11" width="32" height="3" rx="1.5" fill="#ca8a04"/>
+
+    <!-- Wide Panicked Eyes -->
+    <circle cx="20" cy="14" r="2.5" fill="#ffffff"/>
+    <circle cx="20" cy="14" r="1" fill="#000000"/>
+    <circle cx="28" cy="14" r="2.5" fill="#ffffff"/>
+    <circle cx="28" cy="14" r="1" fill="#000000"/>
+
+    <!-- Wide Open Screaming Mouth -->
+    <ellipse cx="24" cy="19" rx="3.5" ry="4" fill="#7f1d1d" stroke="#000000" stroke-width="1"/>
+    <rect x="22" y="16" width="4" height="1.5" fill="#ffffff"/>
+  </g>
+</svg>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Military Camouflage Uniform Torso -->
+  <path d="M12 28 Q32 26 52 28 L50 64 L14 64 Z" fill="#1b5e20"/>
+  <path d="M14 36 L24 32 L30 42 L20 48 Z" fill="#33691e"/> <!-- Camo splotch 1 -->
+  <path d="M34 40 L46 36 L48 48 L38 52 Z" fill="#4d7c0f"/> <!-- Camo splotch 2 -->
+
+  <!-- Tactical Vest & Webbing -->
+  <rect x="22" y="32" width="20" height="28" fill="#14532d" rx="2"/>
+  <rect x="26" y="36" width="5" height="7" fill="#3f6212" rx="1"/> <!-- Ammo Pouch 1 -->
+  <rect x="33" y="36" width="5" height="7" fill="#3f6212" rx="1"/> <!-- Ammo Pouch 2 -->
+  <rect x="26" y="46" width="12" height="4" fill="#0f172a" rx="1"/> <!-- Buckle -->
+
+  <!-- Soldier Arms -->
+  <rect x="6" y="30" width="10" height="24" fill="#1b5e20" rx="3"/>
+  <path d="M48 30 L60 34 L58 44 L46 38 Z" fill="#1b5e20"/>
+  <circle cx="10" cy="54" r="4" fill="#fbcfe8"/>
+  <circle cx="60" cy="40" r="4" fill="#fbcfe8"/>
+
+  <!-- Military Kevlar Helmet & Goggles -->
+  <path d="M16 20 Q32 8 48 20 L50 26 L14 26 Z" fill="#15803d"/>
+  <path d="M14 24 L50 24 L52 27 L12 27 Z" fill="#166534"/> <!-- Helmet Brim -->
+  <!-- Tactical Goggles Strap -->
+  <rect x="18" y="16" width="28" height="6" fill="#0f172a" rx="2"/>
+  <rect x="22" y="17" width="9" height="4" fill="#0284c7" opacity="0.8" rx="1"/>
+  <rect x="33" y="17" width="9" height="4" fill="#0284c7" opacity="0.8" rx="1"/>
+
+  <!-- Face & Camo Paint -->
+  <rect x="20" y="24" width="24" height="12" fill="#fbcfe8" rx="2"/>
+  <rect x="24" y="26" width="4" height="6" fill="#14532d" opacity="0.7"/> <!-- Face Paint -->
+  <rect x="34" y="26" width="4" height="6" fill="#14532d" opacity="0.7"/>
+  <circle cx="36" cy="28" r="2" fill="#0f172a"/> <!-- Eye -->
+</svg>

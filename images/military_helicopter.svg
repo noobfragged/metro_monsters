@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 64" width="128" height="64">
+  <!-- Detailed Apache Attack Helicopter with Rotor Blades -->
+  <g id="apache-helicopter">
+    <!-- Spinning Main Rotor Blades Blur -->
+    <ellipse cx="64" cy="8" rx="58" ry="3" fill="rgba(255,255,255,0.4)" stroke="#475569" stroke-width="1"/>
+    <line x1="8" y1="8" x2="120" y2="8" stroke="#1e293b" stroke-width="2.5"/>
+    <rect x="62" y="8" width="4" height="6" fill="#0f172a"/>
+
+    <!-- Tail Boom & Rear Rotor -->
+    <polygon points="64,22 10,24 10,28 64,32" fill="#334155" stroke="#0f172a" stroke-width="2"/>
+    <!-- Tail Fin & Tail Rotor -->
+    <polygon points="10,24 2,12 14,24" fill="#1e293b"/>
+    <circle cx="6" cy="18" r="7" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+    <!-- Helicopter Fuselage Cockpit Hull -->
+    <path d="M 40 20 L 92 20 C 108 20, 116 30, 108 40 C 100 48, 48 48, 40 40 Z" fill="#1e293b" stroke="#0f172a" stroke-width="2.5"/>
+    <!-- Glass Canopy Cockpit Window -->
+    <path d="M 72 22 L 102 22 C 108 24, 106 34, 94 36 L 72 36 Z" fill="#38bdf8" opacity="0.8" stroke="#0284c7" stroke-width="1.5"/>
+    <line x1="86" y1="22" x2="86" y2="36" stroke="#0f172a" stroke-width="1.5"/>
+
+    <!-- Wing Stub & Rocket Pod -->
+    <rect x="52" y="34" width="24" height="6" rx="2" fill="#475569" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="56" y="38" width="16" height="8" rx="2" fill="#991b1b" stroke="#0f172a" stroke-width="1.5"/>
+
+    <!-- Landing Skids -->
+    <path d="M 46 48 L 46 54 L 94 54 L 94 48" fill="none" stroke="#0f172a" stroke-width="3"/>
+    <line x1="38" y1="54" x2="102" y2="54" stroke="#0f172a" stroke-width="3"/>
+
+    <!-- Nose Gun Turret -->
+    <rect x="100" y="40" width="10" height="4" fill="#0f172a"/>
+    <line x1="105" y1="44" x2="105" y2="52" stroke="#0f172a" stroke-width="2.5"/>
+  </g>
+</svg>
