@@ -110,6 +110,7 @@ canvas#game-canvas {
   transform: translateY(-1px);
 }
 </style>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
@@ -585,6 +586,22 @@ MetroMonsters.Input = (() => {
       justPressedKeys[e.code] = true;
     }
     keys[e.code] = true;
+    
+    // Key capture for Online Room Code Entry
+    if (window.MetroMonstersEngineState === "ONLINE_MENU_JOIN_INPUT") {
+      if (e.key === "Backspace") {
+        window.MetroMonstersRoomCodeInput = (window.MetroMonstersRoomCodeInput || "").slice(0, -1);
+      } else if (e.key === "Enter") {
+        if (window.MetroMonstersRoomCodeInput && window.MetroMonstersRoomCodeInput.length >= 4) {
+          MetroMonsters.OnlineManager.joinRoom(window.MetroMonstersRoomCodeInput);
+        }
+      } else if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+        if ((window.MetroMonstersRoomCodeInput || "").length < 6) {
+          window.MetroMonstersRoomCodeInput = (window.MetroMonstersRoomCodeInput || "") + e.key.toUpperCase();
+        }
+      }
+    }
+
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(e.code)) {
       e.preventDefault();
     }
@@ -634,7 +651,17 @@ MetroMonsters.Input = (() => {
       }
       return false;
     },
+    setRemoteP2Input: (remoteInput) => {
+      window.MetroMonstersRemoteP2Input = remoteInput;
+    },
     getPlayerInput: (playerNum) => {
+      if (playerNum === 2 && window.MetroMonstersRemoteP2Input) {
+        const inp = window.MetroMonstersRemoteP2Input;
+        return {
+          isDown: inp.isDown || { up: false, down: false, left: false, right: false, punch: false, jump: false },
+          wasPressed: inp.wasPressed || { up: false, down: false, left: false, right: false, punch: false, jump: false }
+        };
+      }
       const isDown = { up: false, down: false, left: false, right: false, punch: false, jump: false };
       const wasPressed = { up: false, down: false, left: false, right: false, punch: false, jump: false };
       
@@ -1175,10 +1202,21 @@ MetroMonsters.BuildingManager = (() => {
                 if (tile.soldierTimer === 20) {
                   const wx = this.x + c * this.tileW + (this.tileW - MetroMonsters.Constants.BUILDINGS.WINDOW_WIDTH) / 2;
                   const wy = this.y + r * this.tileH + (this.tileH - MetroMonsters.Constants.BUILDINGS.WINDOW_HEIGHT) / 2;
+                  // Find nearest active player monster to target with sniper bullet or dynamite
+                  const activeMonsters = MetroMonsters.Engine.getActiveMonsters ? MetroMonsters.Engine.getActiveMonsters() : [];
+                  let targetM = null;
+                  let minD = 99999;
+                  activeMonsters.forEach(m => {
+                    if (m && m.isAlive) {
+                      const d = Math.abs(m.x - (wx + 20));
+                      if (d < minD) { minD = d; targetM = m; }
+                    }
+                  });
+
                   if (tile.soldierType === "DYNAMITE") {
-                    MetroMonsters.AIDirector.spawnDynamite(wx + 20, wy + 16, Math.random() > 0.5 ? 2.5 : -2.5, -4.5);
+                    MetroMonsters.AIDirector.spawnDynamite(wx + 20, wy + 16, targetM ? targetM.x : null);
                   } else {
-                    MetroMonsters.AIDirector.spawnSniperBullet(wx + 20, wy + 16);
+                    MetroMonsters.AIDirector.spawnSniperBullet(wx + 20, wy + 16, targetM ? targetM.x : null, targetM ? targetM.y : null);
                   }
                 }
                 if (tile.soldierTimer <= 0) {
@@ -2376,15 +2414,30 @@ MetroMonsters.AIDirector = (() => {
     spawnFireball: (x, y, vx) => {
       fireballs.push({ x, y, vx, vy: 0, radius: 10, dead: false });
     },
-    spawnDynamite: (x, y, vx, vy) => {
+    spawnDynamite: (x, y, targetX = null) => {
+      let vx = MetroMonsters.Utils.randomChoice([-2.5, 2.5]);
+      let vy = -4.0;
+      if (targetX !== null) {
+        const dx = targetX - x;
+        vx = MetroMonsters.Utils.clamp(dx / 30, -4.5, 4.5);
+        vy = -3.8;
+      }
       dynamites.push({ x, y, vx, vy, gravity: 0.15, rotation: 0, alive: true });
     },
-    spawnSniperBullet: (x, y) => {
+    spawnSniperBullet: (x, y, targetX = null, targetY = null) => {
       MetroMonsters.Audio.playShoot();
+      let vx = MetroMonsters.Utils.randomChoice([-4.8, 4.8]);
+      let vy = 1.5;
+      if (targetX !== null && targetY !== null) {
+        const dx = targetX - x;
+        const dy = (targetY - 30) - y;
+        const angle = Math.atan2(dy, dx);
+        vx = Math.cos(angle) * 5.2;
+        vy = Math.sin(angle) * 5.2;
+      }
       projectiles.push({
         x: x, y: y,
-        vx: MetroMonsters.Utils.randomChoice([-4.8, 4.8]),
-        vy: 1.5,
+        vx: vx, vy: vy,
         damage: 2,
         color: "#ffff00"
       });
@@ -2613,6 +2666,128 @@ MetroMonsters.AIDirector = (() => {
   });
 })();
 
+/* ===== ONLINE PEERJS MULTIPLAYER ENGINE ===== */
+MetroMonsters.OnlineManager = (() => {
+  let myPeer = null;
+  let peerConn = null;
+  let isHost = false;
+  let roomCode = "";
+  let isConnected = false;
+  let statusText = "";
+  let guestReady = false;
+  let hostReady = false;
+
+  function generateRoomCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "MM-";
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  function setupConn(conn) {
+    peerConn = conn;
+    isConnected = true;
+    statusText = "PLAYER 2 CONNECTED!";
+
+    conn.on("data", (data) => {
+      if (!data) return;
+
+      if (data.type === "lobby_select") {
+        if (isHost) {
+          guestReady = data.ready;
+        } else {
+          hostReady = data.ready;
+        }
+        if (data.p2SelectIndex !== undefined) {
+          MetroMonsters.UI.setP2SelectIndex(data.p2SelectIndex);
+        }
+      } else if (data.type === "start_game") {
+        MetroMonsters.Engine.startOnlineMatch(data.p1Index, data.p2Index);
+      } else if (data.type === "p2_input") {
+        MetroMonsters.Input.setRemoteP2Input(data.input);
+      }
+    });
+
+    conn.on("close", () => {
+      isConnected = false;
+      statusText = "CONNECTION CLOSED";
+    });
+  }
+
+  return Object.freeze({
+    getHostStatus: () => ({ isHost, roomCode, isConnected, statusText, hostReady, guestReady }),
+    getRoomCode: () => roomCode,
+    isConnected: () => isConnected,
+    isHost: () => isHost,
+
+    hostRoom: () => {
+      if (myPeer) { try { myPeer.destroy(); } catch (_) {} }
+      roomCode = generateRoomCode();
+      isHost = true;
+      statusText = "CREATING ROOM " + roomCode + "...";
+
+      try {
+        myPeer = new Peer("metromonsters_" + roomCode.replace("-", ""));
+        myPeer.on("open", () => {
+          statusText = "WAITING FOR P2... ROOM: " + roomCode;
+        });
+        myPeer.on("connection", (conn) => {
+          setupConn(conn);
+        });
+        myPeer.on("error", (err) => {
+          statusText = "P2P ERROR: " + err.type;
+        });
+      } catch (err) {
+        statusText = "PEERJS ERROR: " + err.message;
+      }
+    },
+
+    joinRoom: (inputCode) => {
+      if (!inputCode) return;
+      if (myPeer) { try { myPeer.destroy(); } catch (_) {} }
+      roomCode = inputCode.toUpperCase().trim();
+      if (!roomCode.startsWith("MM-")) roomCode = "MM-" + roomCode;
+      isHost = false;
+      statusText = "CONNECTING TO " + roomCode + "...";
+
+      try {
+        myPeer = new Peer();
+        myPeer.on("open", () => {
+          const peerId = "metromonsters_" + roomCode.replace("-", "");
+          const conn = myPeer.connect(peerId);
+          setupConn(conn);
+        });
+        myPeer.on("error", (err) => {
+          statusText = "COULD NOT CONNECT: " + err.type;
+        });
+      } catch (err) {
+        statusText = "CONNECTION ERROR: " + err.message;
+      }
+    },
+
+    sendLobbySelect: (p2Index, ready) => {
+      if (peerConn && peerConn.open) {
+        peerConn.send({ type: "lobby_select", p2SelectIndex: p2Index, ready });
+      }
+    },
+
+    sendStartGame: (p1Index, p2Index) => {
+      if (peerConn && peerConn.open) {
+        peerConn.send({ type: "start_game", p1Index, p2Index });
+      }
+    },
+
+    sendP2Input: (input) => {
+      if (peerConn && peerConn.open) {
+        peerConn.send({ type: "p2_input", input });
+      }
+    }
+  });
+})();
+
+
 /* ===== UI SHELL & MODE SELECT ===== */
 MetroMonsters.UI = (() => {
   let gameMode = 1;
@@ -2624,14 +2799,94 @@ MetroMonsters.UI = (() => {
     getGameMode: () => gameMode,
     updateTitle: () => {
       const p1 = MetroMonsters.Input.getPlayerInput(1);
+      const click = MetroMonsters.Input.getClickPos();
+
+      if (click) {
+        // Option 1: LOCAL MODE (x: 400 to 880, y: 260 to 320)
+        if (click.x >= 360 && click.x <= 920 && click.y >= 260 && click.y <= 320) {
+          if (gameMode !== 1) {
+            gameMode = 1;
+            MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+          }
+        }
+        // Option 2: ONLINE MULTIPLAYER (x: 400 to 880, y: 350 to 410)
+        else if (click.x >= 360 && click.x <= 920 && click.y >= 350 && click.y <= 410) {
+          if (gameMode !== 2) {
+            gameMode = 2;
+            MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
+          }
+        }
+      }
+
       if (p1.wasPressed.up || p1.wasPressed.down) {
         gameMode = gameMode === 1 ? 2 : 1;
         MetroMonsters.Audio.playTone(400, 'sine', 0.05, 0.2);
       }
     },
+        renderTitleBackground: (ctx) => {
+      const w = MetroMonsters.Constants.VIEWPORT.WIDTH;
+      const h = MetroMonsters.Constants.VIEWPORT.HEIGHT;
+      const roadY = MetroMonsters.Constants.VIEWPORT.ROAD_Y;
+
+      // 1. Dusk Sunset Gradient Sky
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, roadY);
+      skyGrad.addColorStop(0, "#090414");
+      skyGrad.addColorStop(0.35, "#1f0938");
+      skyGrad.addColorStop(0.70, "#6b176d");
+      skyGrad.addColorStop(1.0, "#d97706");
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 2. Faded Massive Metropolis Background Skyline (3 Layer Depth)
+      // Layer 1: Distant Faded Super-Skyscrapers
+      ctx.fillStyle = "rgba(24, 9, 45, 0.65)";
+      for (let i = 0; i < 14; i++) {
+        const bx = i * 95 - 20;
+        const bw = 70 + ((i * 37) % 40);
+        const bh = 220 + ((i * 53) % 240);
+        ctx.fillRect(bx, roadY - bh, bw, bh);
+
+        // Glowing Window Dots
+        ctx.fillStyle = "rgba(254, 240, 138, 0.35)";
+        for (let wy = roadY - bh + 20; wy < roadY - 20; wy += 28) {
+          for (let wx = bx + 10; wx < bx + bw - 10; wx += 16) {
+            if ((wx + wy) % 3 === 0) {
+              ctx.fillRect(wx, wy, 6, 12);
+            }
+          }
+        }
+        ctx.fillStyle = "rgba(24, 9, 45, 0.65)";
+      }
+
+      // Layer 2: Midground City Skyline
+      ctx.fillStyle = "rgba(15, 6, 30, 0.85)";
+      for (let i = 0; i < 18; i++) {
+        const bx = i * 74 - 10;
+        const bw = 54 + ((i * 29) % 30);
+        const bh = 140 + ((i * 41) % 180);
+        ctx.fillRect(bx, roadY - bh, bw, bh);
+      }
+
+      // Palm Trees & Horizon Silhouette
+      ctx.fillStyle = "#090312";
+      ctx.fillRect(0, roadY - 15, w, 140);
+
+      [80, 260, 520, 780, 1040, 1200].forEach(px => {
+        ctx.fillRect(px, roadY - 110, 6, 110);
+        ctx.beginPath();
+        ctx.arc(px + 3, roadY - 110, 22, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Ambient Single Circular Spotlight
+      const time = Date.now() * 0.0005;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.beginPath();
+      ctx.arc((time * 40) % (w + 200) - 100, 110, 110, 0, Math.PI * 2);
+      ctx.fill();
+    },
     renderTitle: (ctx) => {
-      ctx.fillStyle = "#05050c";
-      ctx.fillRect(0, 0, MetroMonsters.Constants.VIEWPORT.WIDTH, MetroMonsters.Constants.VIEWPORT.HEIGHT);
+      MetroMonsters.UI.renderTitleBackground(ctx);
 
       ctx.fillStyle = "#ff2233";
       ctx.font = "900 84px 'Courier New', monospace";
@@ -2645,21 +2900,22 @@ MetroMonsters.UI = (() => {
       ctx.font = "bold 24px 'Courier New', monospace";
       ctx.fillText("MODERN RETRO ARCADE EDITION", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 190);
 
-      ctx.fillStyle = gameMode === 1 ? "rgba(255, 204, 0, 0.2)" : "rgba(30, 41, 59, 0.6)";
-      ctx.fillRect(440, 260, 400, 60);
+      ctx.fillStyle = gameMode === 1 ? "rgba(255, 204, 0, 0.25)" : "rgba(30, 41, 59, 0.75)";
+      ctx.fillRect(400, 260, 480, 60);
       ctx.strokeStyle = gameMode === 1 ? "#ffcc00" : "#475569";
       ctx.lineWidth = 3;
-      ctx.strokeRect(440, 260, 400, 60);
+      ctx.strokeRect(400, 260, 480, 60);
       ctx.fillStyle = gameMode === 1 ? "#ffcc00" : "#cbd5e1";
       ctx.font = "bold 24px 'Courier New', monospace";
-      ctx.fillText("1 PLAYER  (SOLO MODE)", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 298);
+      ctx.fillText("LOCAL MODE", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 298);
 
-      ctx.fillStyle = gameMode === 2 ? "rgba(0, 255, 127, 0.2)" : "rgba(30, 41, 59, 0.6)";
-      ctx.fillRect(440, 350, 400, 60);
+      ctx.fillStyle = gameMode === 2 ? "rgba(0, 255, 127, 0.25)" : "rgba(30, 41, 59, 0.75)";
+      ctx.fillRect(400, 350, 480, 60);
       ctx.strokeStyle = gameMode === 2 ? "#00ff7f" : "#475569";
-      ctx.strokeRect(440, 350, 400, 60);
+      ctx.strokeRect(400, 350, 480, 60);
       ctx.fillStyle = gameMode === 2 ? "#00ff7f" : "#cbd5e1";
-      ctx.fillText("2 PLAYER LOCAL CO-OP", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 388);
+      ctx.font = "bold 24px 'Courier New', monospace";
+      ctx.fillText("ONLINE MULTIPLAYER", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 388);
 
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 26px 'Courier New', monospace";
@@ -2752,6 +3008,108 @@ MetroMonsters.UI = (() => {
       ctx.font = "bold 20px 'Courier New', monospace";
       ctx.fillText("PRESS [SPACE / ENTER] OR CLICK ANYWHERE TO START", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 600);
     },
+        setP2SelectIndex: (idx) => {
+      p2SelectIndex = idx;
+    },
+    renderDropInOverlay: (ctx, dropInIdx) => {
+      ctx.save();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+      ctx.fillRect(320, 160, 640, 400);
+      ctx.strokeStyle = "#00ff7f";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(320, 160, 640, 400);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "bold 32px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("PLAYER 2 DROP-IN!", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 210);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "18px 'Courier New', monospace";
+      ctx.fillText("CHOOSE YOUR MONSTER & PRESS [M] OR [N] TO JOIN", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 250);
+
+      rosterKeys.forEach((key, idx) => {
+        const charConfig = MetroMonsters.Constants.ROSTER[key];
+        const cardX = 360 + idx * 180;
+        const cardY = 280;
+        const isSelected = dropInIdx === idx;
+
+        ctx.fillStyle = isSelected ? "rgba(0, 255, 127, 0.2)" : "#1e293b";
+        ctx.fillRect(cardX, cardY, 140, 200);
+        ctx.strokeStyle = isSelected ? "#00ff7f" : "#475569";
+        ctx.lineWidth = isSelected ? 4 : 2;
+        ctx.strokeRect(cardX, cardY, 140, 200);
+
+        MetroMonsters.Sprites.drawMonster(ctx, charConfig.id, cardX + 70, cardY + 80, 60, false, false, false, false);
+
+        ctx.fillStyle = charConfig.accentColor;
+        ctx.font = "bold 18px 'Courier New', monospace";
+        ctx.fillText(charConfig.name, cardX + 70, cardY + 155);
+      });
+      ctx.restore();
+    },
+    renderOnlineMenu: (ctx, onlineSubState, roomCodeInput) => {
+      MetroMonsters.UI.renderTitleBackground(ctx);
+
+      ctx.fillStyle = "#00ff7f";
+      ctx.font = "900 52px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("ONLINE MULTIPLAYER", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 120);
+
+      const status = MetroMonsters.OnlineManager.getHostStatus();
+
+      if (onlineSubState === "MAIN") {
+        ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
+        ctx.fillRect(360, 220, 560, 60);
+        ctx.strokeStyle = "#00ff7f"; ctx.lineWidth = 3; ctx.strokeRect(360, 220, 560, 60);
+        ctx.fillStyle = "#00ff7f"; ctx.font = "bold 22px 'Courier New', monospace";
+        ctx.fillText("1. HOST GAME (CREATE ROOM)", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 257);
+
+        ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
+        ctx.fillRect(360, 320, 560, 60);
+        ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 3; ctx.strokeRect(360, 320, 560, 60);
+        ctx.fillStyle = "#ffcc00"; ctx.font = "bold 22px 'Courier New', monospace";
+        ctx.fillText("2. JOIN GAME (ENTER ROOM CODE)", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 357);
+
+        ctx.fillStyle = "#cbd5e1"; ctx.font = "18px 'Courier New', monospace";
+        ctx.fillText("PRESS [1] TO HOST  |  PRESS [2] TO JOIN  |  PRESS [ESC] BACK", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 500);
+      } else if (onlineSubState === "HOST_WAIT") {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+        ctx.fillRect(320, 200, 640, 280);
+        ctx.strokeStyle = "#00ff7f"; ctx.lineWidth = 4; ctx.strokeRect(320, 200, 640, 280);
+
+        ctx.fillStyle = "#ffcc00"; ctx.font = "bold 26px 'Courier New', monospace";
+        ctx.fillText("HOST ROOM CREATED!", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 250);
+
+        ctx.fillStyle = "#00ff7f"; ctx.font = "900 44px 'Courier New', monospace";
+        ctx.fillText(status.roomCode || "MM-...", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 320);
+
+        ctx.fillStyle = "#ffffff"; ctx.font = "18px 'Courier New', monospace";
+        ctx.fillText(status.statusText || "WAITING FOR PLAYER 2 TO JOIN...", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 390);
+
+        ctx.fillStyle = "#94a3b8"; ctx.font = "14px 'Courier New', monospace";
+        ctx.fillText("SHARE ROOM CODE WITH OPPONENT  |  PRESS [ESC] CANCEL", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 440);
+      } else if (onlineSubState === "JOIN_INPUT") {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+        ctx.fillRect(320, 200, 640, 280);
+        ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 4; ctx.strokeRect(320, 200, 640, 280);
+
+        ctx.fillStyle = "#ffcc00"; ctx.font = "bold 24px 'Courier New', monospace";
+        ctx.fillText("ENTER 4-LETTER ROOM CODE:", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 250);
+
+        ctx.fillStyle = "#000"; ctx.fillRect(440, 290, 400, 60);
+        ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 3; ctx.strokeRect(440, 290, 400, 60);
+
+        ctx.fillStyle = "#00ff7f"; ctx.font = "900 36px 'Courier New', monospace";
+        ctx.fillText(roomCodeInput || "____", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 332);
+
+        ctx.fillStyle = "#ffffff"; ctx.font = "16px 'Courier New', monospace";
+        ctx.fillText("TYPE CODE & PRESS [ENTER] TO CONNECT", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 400);
+
+        ctx.fillStyle = "#94a3b8"; ctx.font = "14px 'Courier New', monospace";
+        ctx.fillText(status.statusText || "PRESS [ESC] TO CANCEL", MetroMonsters.Constants.VIEWPORT.WIDTH / 2, 445);
+      }
+    },
     renderHUD: (ctx, p1, p2, currentStageIndex = 0) => {
       const stage = MetroMonsters.Constants.STAGES[currentStageIndex % MetroMonsters.Constants.STAGES.length];
       
@@ -2801,10 +3159,10 @@ MetroMonsters.UI = (() => {
         ctx.fillStyle = p2.hp > 30 ? "#00ff7f" : "#ff1744";
         ctx.fillRect(MetroMonsters.Constants.VIEWPORT.WIDTH - 250, 40, (Math.max(0, p2.hp) / 100) * 220, 14);
       } else {
-        ctx.fillStyle = "#64748b";
+        ctx.fillStyle = "#00ff7f";
         ctx.font = "bold 14px 'Courier New', monospace";
         ctx.textAlign = "right";
-        ctx.fillText("[ PRESS START FOR 2P ]", MetroMonsters.Constants.VIEWPORT.WIDTH - 30, 68);
+        ctx.fillText("[ PRESS M / N FOR 2P DROP-IN ]", MetroMonsters.Constants.VIEWPORT.WIDTH - 30, 68);
       }
     },
     renderStageClear: (ctx, stageIndex) => {
@@ -3294,6 +3652,9 @@ MetroMonsters.Renderer = (() => {
 /* ===== GAME STATE STORE & MAIN LOOP ===== */
 MetroMonsters.Engine = (() => {
   let state = "TITLE";
+  let onlineSubState = "MAIN"; // MAIN, HOST_WAIT, JOIN_INPUT
+  let roomCodeInput = "";
+  let dropInSelectIdx = 1;
   let p1Monster = null;
   let p2Monster = null;
   let currentStageIndex = 0;
@@ -3321,7 +3682,69 @@ MetroMonsters.Engine = (() => {
       MetroMonsters.UI.updateTitle();
       if (MetroMonsters.Input.isConfirmPressed(1)) {
         MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
-        state = "SELECT";
+        if (MetroMonsters.UI.getGameMode() === 2) {
+          state = "ONLINE_MENU";
+          onlineSubState = "MAIN";
+          roomCodeInput = "";
+        } else {
+          state = "SELECT";
+        }
+        MetroMonsters.Input.clearPressed();
+      }
+    } else if (state === "ONLINE_MENU") {
+      const p1 = MetroMonsters.Input.getPlayerInput(1);
+      const status = MetroMonsters.OnlineManager.getHostStatus();
+
+      if (onlineSubState === "MAIN") {
+        const click = MetroMonsters.Input.getClickPos();
+        let clickedHost = false;
+        let clickedJoin = false;
+        if (click && click.x >= 360 && click.x <= 920) {
+          if (click.y >= 220 && click.y <= 280) clickedHost = true;
+          if (click.y >= 320 && click.y <= 380) clickedJoin = true;
+        }
+
+        if (clickedHost || p1.wasPressed.up) {
+          MetroMonsters.OnlineManager.hostRoom();
+          onlineSubState = "HOST_WAIT";
+          MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+          MetroMonsters.Input.clearPressed();
+        } else if (clickedJoin || p1.wasPressed.down) {
+          onlineSubState = "JOIN_INPUT";
+          roomCodeInput = "";
+          MetroMonsters.Audio.playTone(520, 'square', 0.12, 0.3);
+          MetroMonsters.Input.clearPressed();
+        }
+      } else if (onlineSubState === "HOST_WAIT") {
+        if (status.isConnected) {
+          state = "SELECT";
+          MetroMonsters.Audio.playRoar();
+          MetroMonsters.Input.clearPressed();
+        }
+      } else if (onlineSubState === "JOIN_INPUT") {
+        window.MetroMonstersEngineState = "ONLINE_MENU_JOIN_INPUT";
+        roomCodeInput = window.MetroMonstersRoomCodeInput || "";
+        if (status.isConnected) {
+          window.MetroMonstersEngineState = "";
+          state = "SELECT";
+          MetroMonsters.Audio.playRoar();
+          MetroMonsters.Input.clearPressed();
+        }
+      } else {
+        window.MetroMonstersEngineState = "";
+      }
+    } else if (state === "DROPIN_SELECT") {
+      const p2 = MetroMonsters.Input.getPlayerInput(2);
+      if (p2.wasPressed.left) dropInSelectIdx = (dropInSelectIdx + 2) % 3;
+      if (p2.wasPressed.right) dropInSelectIdx = (dropInSelectIdx + 1) % 3;
+
+      if (p2.wasPressed.punch || p2.wasPressed.jump || MetroMonsters.Input.isConfirmPressed(2)) {
+        const rosterKey = ["MANNY", "LIZ", "LYALL"][dropInSelectIdx];
+        const chosenConfig = MetroMonsters.Constants.ROSTER[rosterKey];
+        p2Monster = new MetroMonsters.Entities.Monster(2, chosenConfig, false);
+        MetroMonsters.Audio.playRoar();
+        MetroMonsters.VFX.spawnTextPopup(720, MetroMonsters.Constants.VIEWPORT.ROAD_Y - 50, "P2 JOINED!", "#00ff7f");
+        state = "PLAYING";
         MetroMonsters.Input.clearPressed();
       }
     } else if (state === "SELECT") {
@@ -3343,7 +3766,26 @@ MetroMonsters.Engine = (() => {
         state = "PLAYING";
         MetroMonsters.Input.clearPressed();
       }
-    } else if (state === "PLAYING") {
+        } else if (state === "PLAYING") {
+      // Online Multiplayer Sync
+      if (MetroMonsters.UI.getGameMode() === 2) {
+        if (!MetroMonsters.OnlineManager.isHost()) {
+          const p2Inp = MetroMonsters.Input.getPlayerInput(2);
+          MetroMonsters.OnlineManager.sendP2Input(p2Inp);
+        }
+      }
+
+      // Check Player 2 Arcade Mid-Game Drop-In!
+      if (!p2Monster && MetroMonsters.UI.getGameMode() === 1) {
+        const p2Input = MetroMonsters.Input.getPlayerInput(2);
+        if (p2Input.wasPressed.jump || p2Input.wasPressed.punch) {
+          state = "DROPIN_SELECT";
+          dropInSelectIdx = 1;
+          MetroMonsters.Audio.playTone(600, 'square', 0.15, 0.3);
+          MetroMonsters.Input.clearPressed();
+          return;
+        }
+      }
       MetroMonsters.Audio.updateMusic(currentStageIndex, true);
       const activeMonsters = [p1Monster, p2Monster].filter(Boolean);
       MetroMonsters.BuildingManager.update();
@@ -3415,6 +3857,8 @@ MetroMonsters.Engine = (() => {
 
     if (state === "TITLE") {
       MetroMonsters.UI.renderTitle(ctx);
+    } else if (state === "ONLINE_MENU") {
+      MetroMonsters.UI.renderOnlineMenu(ctx, onlineSubState, roomCodeInput);
     } else if (state === "SELECT") {
       MetroMonsters.UI.renderSelectLobby(ctx);
     } else if (state === "PLAYING" || state === "STAGE_CLEAR" || state === "VICTORY" || state === "PAUSED") {
@@ -3433,6 +3877,8 @@ MetroMonsters.Engine = (() => {
         MetroMonsters.UI.renderVictory(ctx, p1Monster, p2Monster);
       } else if (state === "PAUSED") {
         MetroMonsters.UI.renderPause(ctx);
+      } else if (state === "DROPIN_SELECT") {
+        MetroMonsters.UI.renderDropInOverlay(ctx, dropInSelectIdx);
       }
     }
   }
@@ -3450,6 +3896,19 @@ MetroMonsters.Engine = (() => {
 
   return Object.freeze({
     start: () => { requestAnimationFrame(loop); },
+    getActiveMonsters: () => [p1Monster, p2Monster].filter(Boolean),
+    startOnlineMatch: (p1Idx, p2Idx) => {
+      const rosterKeys = ["MANNY", "LIZ", "LYALL"];
+      const chosen1 = MetroMonsters.Constants.ROSTER[rosterKeys[p1Idx]];
+      const chosen2 = MetroMonsters.Constants.ROSTER[rosterKeys[p2Idx]];
+      currentStageIndex = 0;
+      p1Monster = new MetroMonsters.Entities.Monster(1, chosen1, false);
+      p2Monster = new MetroMonsters.Entities.Monster(2, chosen2, false);
+      MetroMonsters.BuildingManager.loadStage(currentStageIndex);
+      MetroMonsters.AIDirector.init(currentStageIndex);
+      MetroMonsters.Audio.playRoar();
+      state = "PLAYING";
+    },
     togglePause: () => {
       if (state === "PLAYING") state = "PAUSED";
       else if (state === "PAUSED") state = "PLAYING";
